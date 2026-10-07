@@ -1,7 +1,8 @@
 # Roadmap
 
 - [x] Verify the DuckDuckGo parser against the live site (2026-10-07: layout confirmed, sponsored results now filtered)
-- [ ] Make live search survive DDG throttling: it blocked this IP after about 3 queries in a minute at the old pace. Try a longer default delay, jitter, and automatic backoff, or lean on a keyed provider
+- [x] Survive DDG throttling: slower default pace, cool-off and retry, stop after giving up (2026-10-07)
+- [ ] Measure DDG's real limit over a long live run and tune the default delay and backoff from data instead of guesses
 - [ ] Credentials/breach plugin (HIBP, DeHashed, or internal feed), first plugin to write
 - [ ] More search providers (Bing, SearXNG) as a fallback for DDG throttling
 - [ ] Optional config flag to relax the authorization gate

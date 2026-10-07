@@ -62,3 +62,64 @@ def test_provider_selection(monkeypatch):
     monkeypatch.setenv("BRAVE_API_KEY", "k")
     assert search.make_provider("search").name == "ddg"   # search tier stays on the engine
     assert search.make_provider("deep").name == "brave"   # deep dive upgrades to the API
+
+
+class Flaky:
+    """Throttles the first `blocks` calls, then answers."""
+
+    def __init__(self, blocks):
+        self.blocks, self.calls = blocks, 0
+
+    def search(self, query, n):
+        self.calls += 1
+        if self.calls <= self.blocks:
+            raise search.SearchBlocked("slow down")
+        return [search.Result("t", "https://x.test/", "s")]
+
+
+def _client(provider, monkeypatch, backoff="60,120,240", delay=8):
+    monkeypatch.setenv("SHADOWCRUMBS_BACKOFF", backoff)
+    sleeps = []
+    return search.SearchClient(provider, None, delay=delay, sleep=sleeps.append), sleeps
+
+
+def test_throttle_cools_off_then_recovers(monkeypatch):
+    c, sleeps = _client(Flaky(2), monkeypatch)
+    assert len(c.search("q")) == 1
+    assert c.throttle_waits == 2
+    assert 60 in sleeps and 120 in sleeps          # the cool-offs, in schedule order
+    assert c.delay == 32                           # 8 doubled twice, and it stays slower for the rest of the run
+    assert not c.blocked
+
+
+def test_throttle_gives_up_and_stops_hammering(monkeypatch):
+    p = Flaky(99)
+    c, _ = _client(p, monkeypatch)
+    with pytest.raises(search.SearchBlocked):
+        c.search("q1")
+    assert p.calls == 4 and c.blocked              # first try plus three retries
+    with pytest.raises(search.SearchBlocked):
+        c.search("q2")
+    assert p.calls == 4                            # the circuit is open, no more requests sent
+
+
+def test_backoff_can_be_turned_off(monkeypatch):
+    p = Flaky(99)
+    c, sleeps = _client(p, monkeypatch, backoff="0")
+    with pytest.raises(search.SearchBlocked):
+        c.search("q")
+    assert p.calls == 1 and c.throttle_waits == 0
+
+
+def test_delay_never_climbs_past_the_cap(monkeypatch):
+    c, _ = _client(Flaky(3), monkeypatch, delay=40)
+    c.search("q")
+    assert c.delay == search.MAX_DELAY
+
+
+def test_fixture_provider_is_not_paced(monkeypatch, tmp_path):
+    monkeypatch.delenv("SHADOWCRUMBS_SEARCH_DELAY", raising=False)   # the suite zeroes it for speed
+    f = tmp_path / "f.json"
+    f.write_text('{"entries": []}')
+    assert search.SearchClient(search.FixtureProvider(f)).delay == 0
+    assert search.SearchClient(search.DuckDuckGoHTML()).delay == 8

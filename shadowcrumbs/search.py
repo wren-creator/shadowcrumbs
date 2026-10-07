@@ -20,6 +20,7 @@ from bs4 import BeautifulSoup
 from . import config
 
 CACHE_TTL = 7 * 24 * 3600
+MAX_DELAY = 60.0   # the adaptive delay never climbs past this
 
 
 @dataclass
@@ -138,12 +139,15 @@ class SearchClient:
     def __init__(self, provider, store=None, delay=None, sleep=time.sleep):
         self.provider = provider
         self.store = store
-        self.delay = config.search_delay() if delay is None else delay
+        # canned fixture data is not a search engine, so there is nothing to be polite to
+        self.delay = (0.0 if provider.name == "fixture" else config.search_delay()) if delay is None else delay
         self._sleep = sleep
         self._lock = threading.Lock()
         self._last = 0.0
         self.live_queries = 0
         self.cached_queries = 0
+        self.throttle_waits = 0
+        self.blocked = False   # once the engine will not budge, stop hammering it for the rest of the run
 
     def search(self, query, n=20):
         if self.store:
@@ -155,9 +159,25 @@ class SearchClient:
             wait = self.delay * random.uniform(0.7, 1.3) - (time.monotonic() - self._last)
             if wait > 0:
                 self._sleep(wait)
-            results = self.provider.search(query, n)
+            results = self._live(query, n)
             self._last = time.monotonic()
         self.live_queries += 1
         if self.store:
             self.store.cache_put(query, [asdict(r) for r in results])
         return results
+
+    def _live(self, query, n):
+        """One live query. On a throttle: cool off, slow the pace for good, retry. Give up after the schedule runs out."""
+        waits = config.search_backoff()
+        for attempt in range(len(waits) + 1):
+            if self.blocked:
+                raise SearchBlocked("Search engine still throttling after cooling off, skipping the rest of this run.")
+            try:
+                return self.provider.search(query, n)
+            except SearchBlocked:
+                if attempt == len(waits):
+                    self.blocked = True
+                    raise
+                self.throttle_waits += 1
+                self.delay = min(max(self.delay, 1.0) * 2, MAX_DELAY)
+                self._sleep(waits[attempt])

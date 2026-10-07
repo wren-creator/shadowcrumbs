@@ -42,7 +42,13 @@ def user_agent() -> str:
 
 
 def search_delay() -> float:
-    return float(os.environ.get("SHADOWCRUMBS_SEARCH_DELAY", "2.5"))
+    return float(os.environ.get("SHADOWCRUMBS_SEARCH_DELAY", "8"))
+
+
+def search_backoff() -> list[float]:
+    """Seconds to cool off after each consecutive throttle, in order. Empty or 0 turns retrying off."""
+    raw = os.environ.get("SHADOWCRUMBS_BACKOFF", "60,120,240")
+    return [float(x) for x in raw.split(",") if x.strip() and float(x) > 0]
 
 
 def http_timeout() -> float:

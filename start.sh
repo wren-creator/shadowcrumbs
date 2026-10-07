@@ -15,7 +15,7 @@ Usage: ./start.sh [switches]
 
   --demo         run on the bundled fixture data, no network (Acme Demo Corp / acme-demo.test)
   --port N       listen on port N (default 8470)
-  --delay SECS   seconds between live search queries (default 2.5)
+  --delay SECS   seconds between live search queries (default 8)
   --foreground   run in this terminal instead of the background (Ctrl-C to stop)
   --status       say whether it is running and exit
   -h, --help     this text

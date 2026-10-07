@@ -186,7 +186,8 @@ function renderControls() {
   } else if (state.runStatus.summary) {
     const s = state.runStatus.summary;
     statusText = `Last run: ${s.new_findings} new finding${s.new_findings === 1 ? "" : "s"}` +
-      (s.searches_live != null ? `, ${s.searches_live} live search${s.searches_live === 1 ? "" : "es"}, ${s.searches_cached} from cache` : "") + ".";
+      (s.searches_live != null ? `, ${s.searches_live} live search${s.searches_live === 1 ? "" : "es"}, ${s.searches_cached} from cache` : "") +
+      (s.throttle_waits ? `, cooled off ${s.throttle_waits} time${s.throttle_waits === 1 ? "" : "s"} for throttling` : "") + ".";
   }
 
   replaceKids(host,

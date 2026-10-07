@@ -82,11 +82,11 @@ Tech signatures live in `shadowcrumbs/signatures.py`. Add a row for any product 
 | `brave` | Deep dive, automatically, when the key exists | `BRAVE_API_KEY` |
 | `fixture` | Demos and tests | `SHADOWCRUMBS_FIXTURE` |
 
-Other settings: `SHADOWCRUMBS_SEARCH_DELAY` (seconds between live queries, default 2.5), `SHADOWCRUMBS_DATA` (where engagements live), `SHADOWCRUMBS_UA` (user agent).
+Other settings: `SHADOWCRUMBS_SEARCH_DELAY` (seconds between live queries, default 8), `SHADOWCRUMBS_BACKOFF` (cool-off schedule in seconds after a throttle, default `60,120,240`, `0` turns retrying off), `SHADOWCRUMBS_DATA` (where engagements live), `SHADOWCRUMBS_UA` (user agent).
 
 ## Straight talk on limits
 
-- **DuckDuckGo throttles.** Live-tested on 2026-10-07: the parser reads the real page correctly (and drops the sponsored results DDG mixes in), but DDG blocked the test IP after about three queries inside a minute. A full search run is roughly 28 queries, so expect to hit it. When it does, the run records the error and says so. Wait a few minutes, raise `SHADOWCRUMBS_SEARCH_DELAY` (try 10 or more), or set a Brave key and run a deep dive. Better throttle handling is on the roadmap.
+- **DuckDuckGo throttles.** Live-tested on 2026-10-07: the parser reads the real page correctly (and drops the sponsored results DDG mixes in), but DDG blocked the test IP after about three queries inside a minute at the old 2.5 second pace. So the default pace is now 8 seconds with jitter, and a throttle triggers automatic backoff: cool off 1, 2, then 4 minutes, slowing the pace for the rest of the run each time. If it still won't budge, the run stops sending queries and says so, instead of hammering it. A full search run is around 28 queries, so expect it to take several minutes, and longer if it gets throttled. The 8 second pace and the backoff schedule are my best guesses, not measured limits, so tune them. Cached queries cost nothing on a re-run. For serious volume, set a Brave key and run a deep dive.
 - **LinkedIn is read through search snippets only.** Shadowcrumbs never scrapes LinkedIn itself. You get names and titles from the result listings, which is also the quieter way to do it.
 - **No breach or credential lookups yet.** Passwords and leaked accounts need a source with a key (HaveIBeenPwned, DeHashed, an internal feed). That's the first plugin worth writing, and the plugin contract above is all it takes.
 - **Confidence scores are rough.** They say how direct the evidence is, nothing more. Verify before you rely on a finding.
