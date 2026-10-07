@@ -27,6 +27,10 @@ class HttpClient:
         self._pace()
         return self.session.get(url, timeout=timeout or config.http_timeout(), **kw)
 
+    def post(self, url, timeout=None, **kw):
+        self._pace()
+        return self.session.post(url, timeout=timeout or config.http_timeout(), **kw)
+
     def get_json(self, url, timeout=None):
         """JSON body, or None on a 404. Other HTTP errors raise."""
         r = self.get(url, timeout=timeout, headers={"Accept": "application/json"})

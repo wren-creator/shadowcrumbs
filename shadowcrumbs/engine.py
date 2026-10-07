@@ -48,6 +48,8 @@ def execute(slug, tier, names=None, progress=None):
         found, status, err = 0, "ok", None
         if not p.applicable(target):
             status, err = "skipped", "needs " + " or ".join(p.needs_any)
+        elif p.unavailable():
+            status, err = "skipped", p.unavailable()
         else:
             try:
                 for f in p.run(ctx):

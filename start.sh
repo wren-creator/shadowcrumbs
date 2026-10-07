@@ -20,7 +20,8 @@ Usage: ./start.sh [switches]
   --status       say whether it is running and exit
   -h, --help     this text
 
-Environment passed through if set: BRAVE_API_KEY, SHADOWCRUMBS_DATA, SHADOWCRUMBS_UA.
+Environment passed through if set: BRAVE_API_KEY, HIBP_API_KEY, DEHASHED_API_KEY,
+SHADOWCRUMBS_BREACH_FILE, SHADOWCRUMBS_BACKOFF, SHADOWCRUMBS_DATA, SHADOWCRUMBS_UA.
 Binds to localhost only, on purpose. The data is client confidential.
 USAGE
 }

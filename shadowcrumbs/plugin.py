@@ -45,6 +45,11 @@ class Plugin:
     def applicable(self, target):
         return not self.needs_any or any(target.get(k) for k in self.needs_any)
 
+    def unavailable(self):
+        """Return a short reason when the plugin cannot run right now (a missing API key, say), else None.
+        The run is recorded as skipped with that reason instead of failing."""
+        return None
+
     def run(self, ctx):
         raise NotImplementedError
 

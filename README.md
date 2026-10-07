@@ -74,6 +74,20 @@ Categories are `employees`, `emails`, `documents`, `tech`, `subdomains`, `infras
 
 Tech signatures live in `shadowcrumbs/signatures.py`. Add a row for any product you want flagged. The list already leans toward IBM i, z/OS, z/TPF, RACF, and the common PLC and SCADA vendors.
 
+## Credential exposure
+
+Three deep dive sources, all off until you give them something. Without a key or file they show as **skipped** with the reason, not as errors.
+
+| Source | What it does | Needs |
+|---|---|---|
+| `hibp_breaches` | Looks up each address already found in the Emails tab (up to 100) in Have I Been Pwned | `HIBP_API_KEY` |
+| `dehashed_domain` | One DeHashed search for the whole domain, up to 3 pages | `DEHASHED_API_KEY` |
+| `breach_file_import` | Reads your own feed: `.csv` (columns email, password or hash, source), `.jsonl`, or `email:secret` lines in any other file | `SHADOWCRUMBS_BREACH_FILE` |
+
+**No password is ever stored.** A finding records the address, which breach or file it came from, and the kind of secret that leaked: plaintext and how many characters, or what sort of hash it looks like. That is enough to write the report and plan a spray, and nothing you would mind losing from a laptop. If you need the actual secrets, they are in your source feed or the vendor's console, which is where they belong.
+
+Heads up: HIBP and DeHashed are third parties. Running them sends the addresses you found to them. Lookups are cached for a week per address, so re-runs do not burn credits. HIBP is paced at one call every 6.5 seconds to stay inside the entry-level key limit.
+
 ## Search providers
 
 | Provider | When | Needs |
@@ -88,7 +102,7 @@ Other settings: `SHADOWCRUMBS_SEARCH_DELAY` (seconds between live queries, defau
 
 - **DuckDuckGo throttles.** Live-tested on 2026-10-07: the parser reads the real page correctly (and drops the sponsored results DDG mixes in), but DDG blocked the test IP after about three queries inside a minute at the old 2.5 second pace. So the default pace is now 8 seconds with jitter, and a throttle triggers automatic backoff: cool off 1, 2, then 4 minutes, slowing the pace for the rest of the run each time. If it still won't budge, the run stops sending queries and says so, instead of hammering it. A full search run is around 28 queries, so expect it to take several minutes, and longer if it gets throttled. The 8 second pace and the backoff schedule are my best guesses, not measured limits, so tune them. Cached queries cost nothing on a re-run. For serious volume, set a Brave key and run a deep dive.
 - **LinkedIn is read through search snippets only.** Shadowcrumbs never scrapes LinkedIn itself. You get names and titles from the result listings, which is also the quieter way to do it.
-- **No breach or credential lookups yet.** Passwords and leaked accounts need a source with a key (HaveIBeenPwned, DeHashed, an internal feed). That's the first plugin worth writing, and the plugin contract above is all it takes.
+- **Credential lookups need a key or your own feed.** The three sources below are tested against fake API responses and a fake feed, not the live HIBP or DeHashed services (no keys on hand when I built them). Expect to fix a field name or two on your first real call, and tell me what you see.
 - **Confidence scores are rough.** They say how direct the evidence is, nothing more. Verify before you rely on a finding.
 - **Document metadata is the juiciest and the loudest.** It downloads files from the client's own site. That's why it's deep tier.
 - **Not multi-user.** One operator, one machine, no login. Don't put it on a network.
