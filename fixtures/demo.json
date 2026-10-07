@@ -1,0 +1,51 @@
+{
+  "entries": [
+    {
+      "match": "site:acme-demo.test",
+      "results": [
+        {"title": "Acme Demo Corp Customer Portal", "url": "https://portal.acme-demo.test/login", "snippet": "Sign in to the Acme Demo Corp customer portal."},
+        {"title": "Remote Access, GlobalProtect Portal", "url": "https://vpn.acme-demo.test/global-protect/login.esp", "snippet": "Employee remote access."},
+        {"title": "Outlook Web App", "url": "https://mail.acme-demo.test/owa/auth/logon.aspx", "snippet": "Acme Demo Corp webmail."},
+        {"title": "About Acme Demo Corp", "url": "https://www.acme-demo.test/about", "snippet": "Acme Demo Corp has made industrial widgets since 1974."},
+        {"title": "Network Overview", "url": "https://www.acme-demo.test/docs/network-overview.pdf", "snippet": "Acme Demo Corp network overview for partners."},
+        {"title": "Q3 Operations Report", "url": "https://files.acme-demo.test/reports/Q3-ops.xlsx", "snippet": "Operations metrics."},
+        {"title": "Careers at Acme Demo Corp", "url": "https://www.acme-demo.test/careers", "snippet": "We are hiring a Mainframe Systems Programmer. Experience with z/OS, RACF and CICS required. IBM i (AS/400) admin a plus."}
+      ]
+    },
+    {
+      "match": "@acme-demo.test",
+      "results": [
+        {"title": "Contact the team", "url": "https://www.acme-demo.test/contact", "snippet": "Reach jane.doe@acme-demo.test or john.smith@acme-demo.test. General questions: info@acme-demo.test"},
+        {"title": "Press kit", "url": "https://www.acme-demo.test/press", "snippet": "Media contact mary.jones@acme-demo.test for interviews."},
+        {"title": "Industry directory entry", "url": "https://directory.example.org/acme", "snippet": "Acme Demo Corp IT contact: raj.patel@acme-demo.test"}
+      ]
+    },
+    {
+      "match": "linkedin.com/in",
+      "results": [
+        {"title": "Jane Doe - Senior Mainframe Systems Programmer - Acme Demo Corp | LinkedIn", "url": "https://www.linkedin.com/in/jane-doe-demo", "snippet": "Senior Mainframe Systems Programmer at Acme Demo Corp. z/OS, RACF, CICS."},
+        {"title": "Marcus Webb - OT Network Engineer - Acme Demo Corp | LinkedIn", "url": "https://www.linkedin.com/in/marcus-webb-demo", "snippet": "I manage Allen-Bradley ControlLogix PLCs and Ignition SCADA at Acme Demo Corp."},
+        {"title": "Priya Nair, CISSP - IT Security Manager - Acme Demo Corp | LinkedIn", "url": "https://www.linkedin.com/in/priya-nair-demo", "snippet": "Security lead at Acme Demo Corp. Okta, Splunk, Palo Alto."},
+        {"title": "Someone Else - Engineer - Other Industries | LinkedIn", "url": "https://www.linkedin.com/in/someone-else", "snippet": "Works somewhere else entirely."}
+      ]
+    },
+    {
+      "match": "AS/400",
+      "results": [
+        {"title": "IBM i Administrator, Acme Demo Corp | Indeed", "url": "https://jobs.example.org/acme-ibmi-admin", "snippet": "Acme Demo Corp is looking for an IBM i (AS/400) administrator to run the order system on Power9 hardware."}
+      ]
+    },
+    {
+      "match": "SCADA",
+      "results": [
+        {"title": "Controls Engineer, Acme Demo Corp", "url": "https://jobs.example.org/acme-controls-engineer", "snippet": "Acme Demo Corp plant floor. Experience with Siemens S7-1500, TIA Portal and Modbus required."}
+      ]
+    },
+    {
+      "match": "z/OS",
+      "results": [
+        {"title": "Acme Demo Corp mainframe operator", "url": "https://jobs.example.org/acme-mainframe-op", "snippet": "Acme Demo Corp runs z/OS with Db2 and COBOL batch. z/TPF reservation system on the side."}
+      ]
+    }
+  ]
+}

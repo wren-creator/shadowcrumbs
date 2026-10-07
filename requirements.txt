@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+requests
+beautifulsoup4
+dnspython
+pypdf
+defusedxml
+reportlab
+pytest
+httpx

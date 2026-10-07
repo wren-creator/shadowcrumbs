@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shadowcrumbs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="logo">SHADOWCRUMBS</span>
+    <span class="tagline">the crumbs they left behind, one tab per client</span>
+  </div>
+  <nav id="tabs" class="tabs" role="tablist" aria-label="Engagements"></nav>
+</header>
+
+<main id="main"></main>
+
+<dialog id="new-dlg">
+  <form id="new-form" method="dialog" autocomplete="off">
+    <h2>New engagement</h2>
+    <p class="dim">Give it a name and at least one target. Add the authorization reference now or later. Deep dive stays locked until you do.</p>
+    <label>Engagement name <input name="name" required placeholder="Client Q4 external"></label>
+    <label>Company <input name="company" placeholder="Acme Corp"></label>
+    <label>Domain <input name="domain" placeholder="acme.com"></label>
+    <label>IP or CIDR range <input name="ip" placeholder="203.0.113.0/28"></label>
+    <label>Authorization reference <input name="auth_ref" placeholder="SOW 2026-114, ROE signed 10/01"></label>
+    <label class="check"><input type="checkbox" name="authorized"> I have written authorization to test this target</label>
+    <p id="new-error" class="error" role="alert"></p>
+    <div class="row">
+      <button type="button" class="btn ghost" id="new-cancel">Cancel</button>
+      <button type="submit" class="btn primary">Create</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>
