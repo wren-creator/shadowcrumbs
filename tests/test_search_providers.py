@@ -1,6 +1,6 @@
 """Parser tests against a representative DuckDuckGo HTML page.
 
-This pins the parsing logic. It does not prove DuckDuckGo still serves this layout, so if live
+This pins the parsing logic. The first live run (2026-10-07) confirmed the layout, plus one surprise: sponsored results. It does not prove DuckDuckGo still serves this layout, so if live
 searches come back empty, compare a real response with SAMPLE below first.
 """
 import pytest
@@ -15,6 +15,8 @@ SAMPLE = """
 </div>
 <div class="result"><a class="result__a" href="https://direct.example.org/page">Direct link</a></div>
 <div class="result"><span>no anchor here</span></div>
+<div class="result result--ad"><a class="result__a" href="https://duckduckgo.com/y.js?ad_domain=adobe.com&ad_provider=bingv7aa">Free online PDF editor</a></div>
+<div class="result"><a class="result__a" href="//duckduckgo.com/y.js?ad_domain=sodapdf.com">Soda PDF</a></div>
 </body></html>
 """
 
@@ -36,6 +38,13 @@ def test_ddg_parse_and_unwrap(monkeypatch):
         ("Direct link", "https://direct.example.org/page"),
     ]
     assert out[0].snippet == "Remote access for Acme staff."
+
+
+def test_ddg_sponsored_results_are_dropped(monkeypatch):
+    """Found on the first live run: ads arrive as ordinary-looking results. They must never become findings."""
+    monkeypatch.setattr(search.requests, "post", lambda *a, **k: Resp(SAMPLE))
+    urls = [r.url for r in search.DuckDuckGoHTML().search("site:acme-demo.test", 10)]
+    assert not any("y.js" in u or "ad_domain" in u for u in urls)
 
 
 @pytest.mark.parametrize("resp", [Resp("", 202), Resp("", 429), Resp('<div class="anomaly-modal"></div>')])

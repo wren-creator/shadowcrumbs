@@ -55,12 +55,22 @@ class DuckDuckGoHTML:
             a = div.select_one("a.result__a")
             if not a or not a.get("href"):
                 continue
+            if "result--ad" in (div.get("class") or []):
+                continue
             url = self._unwrap(a["href"])
+            if self._is_ad(url):
+                continue
             snip = div.select_one(".result__snippet")
             out.append(Result(a.get_text(" ", strip=True), url, snip.get_text(" ", strip=True) if snip else ""))
             if len(out) >= n:
                 break
         return out
+
+    @staticmethod
+    def _is_ad(url):
+        """Sponsored links come back wrapped in duckduckgo.com/y.js, never a real result."""
+        u = urlparse(url)
+        return (u.hostname or "").endswith("duckduckgo.com") and u.path.startswith("/y.js")
 
     @staticmethod
     def _unwrap(href):

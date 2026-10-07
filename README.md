@@ -86,7 +86,7 @@ Other settings: `SHADOWCRUMBS_SEARCH_DELAY` (seconds between live queries, defau
 
 ## Straight talk on limits
 
-- **DuckDuckGo throttles.** Scraping its HTML endpoint works until it doesn't. When it blocks you, the run records the error and says so. Wait, raise the delay, or set a Brave key and run a deep dive. I could not reach DuckDuckGo from the build environment, so the parser is tested against a sample page, not the live site. If your first live run comes back empty, that's the first place to look.
+- **DuckDuckGo throttles.** Live-tested on 2026-10-07: the parser reads the real page correctly (and drops the sponsored results DDG mixes in), but DDG blocked the test IP after about three queries inside a minute. A full search run is roughly 28 queries, so expect to hit it. When it does, the run records the error and says so. Wait a few minutes, raise `SHADOWCRUMBS_SEARCH_DELAY` (try 10 or more), or set a Brave key and run a deep dive. Better throttle handling is on the roadmap.
 - **LinkedIn is read through search snippets only.** Shadowcrumbs never scrapes LinkedIn itself. You get names and titles from the result listings, which is also the quieter way to do it.
 - **No breach or credential lookups yet.** Passwords and leaked accounts need a source with a key (HaveIBeenPwned, DeHashed, an internal feed). That's the first plugin worth writing, and the plugin contract above is all it takes.
 - **Confidence scores are rough.** They say how direct the evidence is, nothing more. Verify before you rely on a finding.
