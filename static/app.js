@@ -444,7 +444,27 @@ function wireDialog() {
 
 // boot ---------------------------------------------------------------
 
+function wireTheme() {
+  const logo = $(".logo");
+  const apply = (name) => {
+    if (name === "rose") document.documentElement.dataset.theme = "rose";
+    else delete document.documentElement.dataset.theme;
+  };
+  try { apply(localStorage.getItem("sc-theme")); } catch { /* storage blocked, default theme */ }
+  const flip = () => {
+    const next = document.documentElement.dataset.theme === "rose" ? "green" : "rose";
+    apply(next);
+    try { localStorage.setItem("sc-theme", next); } catch { /* not remembered, still works */ }
+  };
+  logo.setAttribute("role", "button");
+  logo.tabIndex = 0;
+  logo.title = "Switch theme";
+  logo.addEventListener("click", flip);
+  logo.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); flip(); } });
+}
+
 async function boot() {
+  wireTheme();
   wireDialog();
   state.meta = await api("/api/meta");
   await loadEngagements();

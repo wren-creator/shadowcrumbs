@@ -15,6 +15,8 @@ Give it a company name, a domain, or an IP range. It pulls what search engines a
 
 Switches for `start.sh`: `--demo`, `--port N`, `--delay SECS` (pause between live search queries), `--foreground` (stay in the terminal, Ctrl-C to stop), `--status`, `--help`. It builds `.venv` on first run if one isn't there. Logs go to `shadowcrumbs.log`.
 
+Click the **SHADOWCRUMBS** logo in the header to flip between the green screen and a rose theme. It remembers your pick.
+
 Prefer to do it by hand?
 
 ```bash
