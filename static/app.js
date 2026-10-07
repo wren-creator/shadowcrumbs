@@ -18,6 +18,11 @@ const state = {
 
 const $ = (sel, root = document) => root.querySelector(sel);
 
+// replaceChildren stringifies null and false into visible text, so drop them first.
+function replaceKids(host, ...kids) {
+  host.replaceChildren(...kids.filter((k) => k != null && k !== false));
+}
+
 function el(tag, props = {}, ...kids) {
   const n = document.createElement(tag);
   for (const [k, v] of Object.entries(props)) {
@@ -184,7 +189,7 @@ function renderControls() {
       (s.searches_live != null ? `, ${s.searches_live} live search${s.searches_live === 1 ? "" : "es"}, ${s.searches_cached} from cache` : "") + ".";
   }
 
-  host.replaceChildren(
+  replaceKids(host,
     el("div", { class: "controls" },
       el("div", { class: "seg", role: "group", "aria-label": "Mode" },
         el("button", { "aria-pressed": String(state.tier === "search"), onclick: () => setTier("search") }, "SEARCH"),
@@ -212,7 +217,7 @@ function renderPlugins() {
   const running = state.runStatus.state === "running";
   const locked = state.tier === "deep" && !e.authorized;
   const list = state.meta.plugins.filter((p) => p.tier === state.tier);
-  host.replaceChildren(
+  replaceKids(host,
     el("h3", {}, state.tier === "deep" ? "Deep dive sources" : "Search sources"),
     el("div", { class: "plugins" }, ...list.map((p) => {
       const last = lastRunFor(p.name);
