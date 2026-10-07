@@ -29,6 +29,8 @@ Want to see it work with no network? `./start.sh --demo` runs on the bundled dem
 
 Make an engagement for `Acme Demo Corp` / `acme-demo.test` and hit Run.
 
+Just want to show it off? Open `docs/mockup.html` in any browser. It is the real dashboard with a captured demo run baked in, no server needed, read-only, safe to screen share. Rebuild it with `python docs/build_mockup.py DATA_DIR` after capturing the API output from a `--demo` run.
+
 ## How a recon goes
 
 1. **New engagement.** Name, plus any of company, domain, IP or CIDR. That's the tab.
