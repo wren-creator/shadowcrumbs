@@ -7,6 +7,17 @@ Give it a company name, a domain, or an IP range. It pulls what search engines a
 ## Run it
 
 ```bash
+./start.sh              # background, then open http://127.0.0.1:8470
+./start.sh --demo       # fixture data, no network (see below)
+./start.sh --status     # is it up?
+./stop.sh               # stop it
+```
+
+Switches for `start.sh`: `--demo`, `--port N`, `--delay SECS` (pause between live search queries), `--foreground` (stay in the terminal, Ctrl-C to stop), `--status`, `--help`. It builds `.venv` on first run if one isn't there. Logs go to `shadowcrumbs.log`.
+
+Prefer to do it by hand?
+
+```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 .venv/bin/python run.py
@@ -14,11 +25,7 @@ python3 -m venv .venv
 
 Open http://127.0.0.1:8470. It binds to localhost on purpose. This holds client data, so keep it there.
 
-Want to see it work with no network? Run it on the bundled demo data, a fictional company on a reserved `.test` domain:
-
-```bash
-SHADOWCRUMBS_SEARCH=fixture SHADOWCRUMBS_FIXTURE=fixtures/demo.json python run.py
-```
+Want to see it work with no network? `./start.sh --demo` runs on the bundled demo data, a fictional company on a reserved `.test` domain.
 
 Make an engagement for `Acme Demo Corp` / `acme-demo.test` and hit Run.
 
@@ -85,7 +92,8 @@ Other settings: `SHADOWCRUMBS_SEARCH_DELAY` (seconds between live queries, defau
 ## Layout
 
 ```
-run.py                       start the server
+start.sh / stop.sh           background start and stop
+run.py                       the server itself
 shadowcrumbs/
   app.py                     API and dashboard host
   engine.py                  runs plugins, tracks progress, enforces the gate
