@@ -24,7 +24,7 @@ Keys come from environment variables, one per service, and a source without its 
 |---|---|---|---|---|
 | 9 | hunter.io | Email addresses at a domain, plus the address pattern | `emails` | API key, small free tier |
 | 4 | grep.app | Code search across public repos, for the domain's name in configs and leaked secrets | `infrastructure` | No official API, use with care |
-| 15 | searchcode.com | The same idea, with a plain JSON API | `infrastructure` | No key |
+| n/a | GitHub code search (not on the original list) | Public code that mentions the domain: configs, scripts, leaked hostnames. An official, stable API, unlike grep.app | `infrastructure`, `subdomains`, `emails` | A GitHub token (`GITHUB_TOKEN`, free), about 10 searches a minute |
 | 1 | shodan.io | Hosts and open services on the client's addresses | `infrastructure`, `tech` | API key |
 | 8 | censys.io | Hosts, services and certificates | `infrastructure`, `subdomains` | API id and secret |
 | 14 | app.netlas.io | Same family: internet scan data | `infrastructure` | API key |
@@ -44,6 +44,7 @@ The internet scanner family (Shodan, Censys, Netlas, ONYPHE, BinaryEdge, ZoomEye
 
 | # | Service | What it is | Why it's low on the list |
 |---|---|---|---|
+| 15 | searchcode.com | Used to be a search across all public code | Checked 2026-10-09: the old search API now returns 404. It has become a per-repository analyzer built for AI assistants, and every call needs a repository you name. It could scan the client's own public repos for leaked secrets, but only once something else has found those repos |
 | 3 | wigle.net | Wi-Fi network database | Looks up by location or SSID, not by company or domain. Useful for a physical or wireless assessment, which is a different tool |
 | 7 | viz.greynoise.io | Mass internet scanner noise | Tells you whether an IP is background noise. Good for triage, not for discovery |
 | 19 | socradar.io | Threat intelligence platform | Mostly a paid platform, with little open API for this use |
