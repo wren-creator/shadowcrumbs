@@ -14,6 +14,7 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv("SHADOWCRUMBS_SEARCH", "fixture")
     monkeypatch.setenv("SHADOWCRUMBS_FIXTURE", str(ROOT / "fixtures" / "demo.json"))
     monkeypatch.setenv("SHADOWCRUMBS_SEARCH_DELAY", "0")
+    monkeypatch.setenv("SHADOWCRUMBS_ALLOWED_HOSTS", "testserver")   # TestClient's default Host
     from shadowcrumbs import engine
     engine.STATE.clear()
 

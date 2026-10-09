@@ -2,7 +2,10 @@
 from datetime import datetime
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Response
+from urllib.parse import urlsplit
+
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -14,6 +17,27 @@ from .store import Store, list_slugs
 load_plugins()
 
 app = FastAPI(title="Shadowcrumbs", version=__version__, docs_url="/api/docs", openapi_url="/api/openapi.json")
+
+
+def _host_only(value):
+    """Host name from a Host header or an Origin URL, port and brackets stripped."""
+    if not value:
+        return ""
+    value = value.strip().lower()
+    host = urlsplit(value if "://" in value else "//" + value).hostname
+    return host or ""
+
+
+@app.middleware("http")
+async def only_talk_to_ourselves(request: Request, call_next):
+    """Refuse requests that arrive under someone else's name (DNS rebinding) or from another site's page."""
+    allowed = config.allowed_hosts()
+    if _host_only(request.headers.get("host")) not in allowed:
+        return JSONResponse({"detail": "Unknown Host header. Shadowcrumbs only answers on localhost."}, status_code=400)
+    origin = request.headers.get("origin")
+    if origin and _host_only(origin) not in allowed:
+        return JSONResponse({"detail": "Cross-site request refused."}, status_code=403)
+    return await call_next(request)
 
 
 class NewEngagement(BaseModel):

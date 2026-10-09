@@ -63,3 +63,11 @@ def search_provider(tier: str) -> str:
     if tier == "deep" and os.environ.get("BRAVE_API_KEY"):
         return "brave"
     return "ddg"
+
+
+def allowed_hosts() -> set[str]:
+    """Host names this server answers to. A page on another site that rebinds its DNS to 127.0.0.1 still
+    sends its own name in the Host header, so refusing unknown names shuts that attack out.
+    Add more (a reverse proxy name, say) with SHADOWCRUMBS_ALLOWED_HOSTS=name1,name2."""
+    extra = os.environ.get("SHADOWCRUMBS_ALLOWED_HOSTS", "")
+    return {"127.0.0.1", "localhost", "::1"} | {h.strip().lower() for h in extra.split(",") if h.strip()}

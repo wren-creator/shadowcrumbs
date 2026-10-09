@@ -112,3 +112,34 @@ def test_markdown_export_escapes_table_breakers(client):
     Store(slug).add_finding("tech", "Weird | value", "t", "search", notes="line one\nline two | pipe")
     md = client.get(f"/api/engagements/{slug}/export", params={"format": "md"}).text
     assert "Weird \\| value" in md and "line one line two \\| pipe" in md
+
+
+# --- DNS rebinding and cross-site requests ----------------------------------------------
+
+@pytest.mark.parametrize("host", ["evil.example", "attacker.test:8470", "127.0.0.1.evil.example", ""])
+def test_unknown_host_header_is_refused(client, host):
+    r = client.get("/api/engagements", headers={"Host": host})
+    assert r.status_code == 400 and "Host" in r.json()["detail"]
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1:8470", "localhost:8470", "localhost", "[::1]:8470"])
+def test_localhost_names_are_allowed(client, host):
+    assert client.get("/api/engagements", headers={"Host": host}).status_code == 200
+
+
+def test_cross_site_origin_is_refused_even_on_a_good_host(client):
+    r = client.post("/api/engagements", headers={"Host": "localhost:8470", "Origin": "https://evil.example"},
+                    json={"name": "x", "domain": "x.test"})
+    assert r.status_code == 403
+    assert client.get("/api/engagements").json() == []            # nothing got created
+
+
+def test_same_origin_requests_pass(client):
+    r = client.post("/api/engagements", headers={"Host": "localhost:8470", "Origin": "http://localhost:8470"},
+                    json={"name": "x", "domain": "x.test"})
+    assert r.status_code == 201
+
+
+def test_extra_host_can_be_allowed_by_config(client, monkeypatch):
+    monkeypatch.setenv("SHADOWCRUMBS_ALLOWED_HOSTS", "recon.lan")
+    assert client.get("/api/engagements", headers={"Host": "recon.lan:8470"}).status_code == 200
