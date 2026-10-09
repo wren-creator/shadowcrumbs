@@ -5,7 +5,7 @@
 In order. Items marked **needs a key** can wait until there is one, so skip down the list.
 
 - [ ] Push the data source catalog (`docs/DATA-SOURCES.md`), it is committed but not on GitHub yet
-- [ ] Check whether the DuckDuckGo block has cleared with a single query, then re-run `tools/measure_ddg.py` with sparse probes to learn the true cooldown and whether polling extends it
+- [ ] Re-measure DuckDuckGo from a different network (2026-10-09: from this IP one query works and the next, a minute or two later, is blocked, same pattern as before. The IP may be flagged, or DDG's HTML endpoint may just be hostile to scrapers). One check query, then `tools/measure_ddg.py --paces 10,5,2.5 --per-pace 20`. If a fresh IP takes the slow paces, the 8 second default is right. If not, make a Brave key the recommended route
 - [ ] urlscan.io plugin: past scans of the domain give pages, hosts, IPs and technologies (free, no key needed)
 - [ ] searchcode.com plugin: code search for the domain in public repos (no key needed)
 - [ ] hunter.io plugin: emails and the address pattern for the domain (**needs a key**, small free tier)
