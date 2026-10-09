@@ -4,7 +4,6 @@
 
 In order. Items marked **needs a key** can wait until there is one, so skip down the list.
 
-- [ ] Push the data source catalog (`docs/DATA-SOURCES.md`), it is committed but not on GitHub yet
 - [ ] Re-measure DuckDuckGo from a different network (2026-10-09: from this IP one query works and the next, a minute or two later, is blocked, same pattern as before. The IP may be flagged, or DDG's HTML endpoint may just be hostile to scrapers). One check query, then `tools/measure_ddg.py --paces 10,5,2.5 --per-pace 20`. If a fresh IP takes the slow paces, the 8 second default is right. If not, make a Brave key the recommended route
 - [ ] urlscan.io plugin: past scans of the domain give pages, hosts, IPs and technologies (free, no key needed)
 - [ ] searchcode.com plugin: code search for the domain in public repos (no key needed)
@@ -32,4 +31,4 @@ The full list of candidate sources, and where each one fits, is in [docs/DATA-SO
 - [x] Credentials/breach sources: HIBP, DeHashed, local feed import (2026-10-07), never stores passwords
 - [x] Refuse unknown Host and cross-site Origin headers (DNS rebinding)
 - [x] GPL-3.0 licence, responsible use section, CONTRIBUTING.md, repo public (2026-10-08)
-- [x] Catalog of 24 pentester search engines mapped to Shadowcrumbs categories
+- [x] Catalog of 24 pentester search engines mapped to Shadowcrumbs categories, pushed (2026-10-09)
