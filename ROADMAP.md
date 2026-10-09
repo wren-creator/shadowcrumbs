@@ -9,3 +9,6 @@
 - [ ] More search providers (Bing, SearXNG) as a fallback for DDG throttling
 - [ ] Optional config flag to relax the authorization gate
 - [ ] Add the dashboard sanitization check (script tags, javascript: URLs) to pytest, currently manual
+- [ ] Data sources from the pentester search engine list, see [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md): hunter.io for emails, urlscan.io and searchcode.com (no key needed), then a shared helper plus short plugins for the internet scanners (Shodan, Censys, Netlas, ONYPHE, BinaryEdge, ZoomEye, FOFA, FullHunt, LeakIX)
+- [ ] Vulners plugin: turn product and version strings from the tech findings into known CVEs
+- [ ] IntelX credential source, following the no-password rule

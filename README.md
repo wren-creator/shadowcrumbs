@@ -81,6 +81,8 @@ class MySource(Plugin):
         yield Finding("tech", "Something", url="https://...", confidence=60, notes="why you think so")
 ```
 
+There is a reference list of other services worth wiring in, with where each one fits, in [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md).
+
 Categories are `employees`, `emails`, `documents`, `tech`, `subdomains`, `infrastructure`. A plugin that crashes gets logged in run history and the rest carry on. A plugin file that fails to load shows up in the dashboard instead of taking the app down.
 
 Tech signatures live in `shadowcrumbs/signatures.py`. Add a row for any product you want flagged. The list already leans toward IBM i, z/OS, z/TPF, RACF, and the common PLC and SCADA vendors.
