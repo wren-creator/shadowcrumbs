@@ -141,3 +141,46 @@ def test_fixture_provider_is_not_paced(monkeypatch, tmp_path):
     f.write_text('{"entries": []}')
     assert search.SearchClient(search.FixtureProvider(f)).delay == 0
     assert search.SearchClient(search.DuckDuckGoHTML()).delay == 8
+
+
+def test_searxng_parses_json_and_sends_no_key(monkeypatch):
+    seen = {}
+
+    class R:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"results": [{"title": "T", "url": "https://a.test/x", "content": "snip"},
+                                {"title": "U", "url": "https://b.test/y", "content": ""}]}
+
+    def fake_get(url, **k):
+        seen["url"], seen["params"] = url, k["params"]
+        return R()
+
+    monkeypatch.setattr(search.requests, "get", fake_get)
+    got = search.SearXNG("http://127.0.0.1:8080/").search("site:a.test", 1)
+    assert seen["url"] == "http://127.0.0.1:8080/search"
+    assert seen["params"] == {"q": "site:a.test", "format": "json"}
+    assert [(r.title, r.url, r.snippet) for r in got] == [("T", "https://a.test/x", "snip")]
+
+
+@pytest.mark.parametrize("status,match", [(429, "rate limit"), (403, "search.formats")])
+def test_searxng_refusals_are_explained(monkeypatch, status, match):
+    monkeypatch.setattr(search.requests, "get", lambda *a, **k: Resp("", status))
+    with pytest.raises(search.SearchBlocked, match=match):
+        search.SearXNG("http://x").search("q", 5)
+
+
+def test_searxng_url_wins_when_set(monkeypatch):
+    monkeypatch.delenv("SHADOWCRUMBS_SEARCH", raising=False)
+    monkeypatch.delenv("BRAVE_API_KEY", raising=False)
+    monkeypatch.setenv("SHADOWCRUMBS_SEARXNG_URL", "http://127.0.0.1:8080")
+    assert search.make_provider("search").name == "searxng"
+    assert search.make_provider("deep").name == "searxng"
+    monkeypatch.delenv("SHADOWCRUMBS_SEARXNG_URL")
+    assert search.make_provider("search").name == "ddg"
+    with pytest.raises(RuntimeError, match="SEARXNG_URL"):
+        search.SearXNG()

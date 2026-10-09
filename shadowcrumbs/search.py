@@ -3,6 +3,7 @@
 Providers:
   ddg      DuckDuckGo HTML endpoint, no key, the default
   brave    Brave Search API, used on deep dives when BRAVE_API_KEY is set
+  searxng  your own SearXNG instance (SHADOWCRUMBS_SEARXNG_URL), no key, used first when set
   fixture  canned results from a JSON file, for demos and tests
 """
 import json
@@ -104,6 +105,34 @@ class Brave:
         ]
 
 
+class SearXNG:
+    """A SearXNG instance you run yourself. It needs `json` listed under search.formats in its settings."""
+
+    name = "searxng"
+
+    def __init__(self, base=None):
+        self.base = (base or config.searxng_url() or "").rstrip("/")
+        if not self.base:
+            raise RuntimeError("SHADOWCRUMBS_SEARXNG_URL is not set")
+
+    def search(self, query, n):
+        r = requests.get(
+            f"{self.base}/search",
+            params={"q": query, "format": "json"},
+            headers={"User-Agent": config.user_agent(), "Accept": "application/json"},
+            timeout=config.http_timeout(),
+        )
+        if r.status_code == 429:
+            raise SearchBlocked("SearXNG rate limit hit")
+        if r.status_code == 403:
+            raise SearchBlocked(
+                "SearXNG refused the request. Add json under search.formats in its settings.yml."
+            )
+        r.raise_for_status()
+        rows = r.json().get("results", [])
+        return [Result(x.get("title", ""), x.get("url", ""), x.get("content", "")) for x in rows[:n]]
+
+
 class FixtureProvider:
     """Reads {"entries": [{"match": "substring", "results": [{title, url, snippet}]}]}."""
 
@@ -127,6 +156,8 @@ def make_provider(tier):
         return DuckDuckGoHTML()
     if name == "brave":
         return Brave()
+    if name == "searxng":
+        return SearXNG()
     if name == "fixture":
         path = os.environ.get("SHADOWCRUMBS_FIXTURE")
         if not path:

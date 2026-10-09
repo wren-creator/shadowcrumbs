@@ -59,11 +59,17 @@ def http_timeout() -> float:
     return float(os.environ.get("SHADOWCRUMBS_HTTP_TIMEOUT", "15"))
 
 
+def searxng_url() -> str:
+    return os.environ.get("SHADOWCRUMBS_SEARXNG_URL", "").strip()
+
+
 def search_provider(tier: str) -> str:
     """Search tier uses the search engine. Deep tier prefers an API when a key exists."""
     forced = os.environ.get("SHADOWCRUMBS_SEARCH")
     if forced:
         return forced
+    if searxng_url():
+        return "searxng"
     if tier == "deep" and os.environ.get("BRAVE_API_KEY"):
         return "brave"
     return "ddg"

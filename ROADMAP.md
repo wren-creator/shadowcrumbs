@@ -4,7 +4,8 @@
 
 In order. Items marked **needs a key** can wait until there is one, so skip down the list.
 
-- [ ] Re-measure DuckDuckGo from a different network (2026-10-09: from this IP one query works and the next, a minute or two later, is blocked, same pattern as before. The IP may be flagged, or DDG's HTML endpoint may just be hostile to scrapers). One check query, then `tools/measure_ddg.py --paces 10,5,2.5 --per-pace 20`. If a fresh IP takes the slow paces, the 8 second default is right. If not, make a Brave key the recommended route
+- [ ] Run a local SearXNG and point `SHADOWCRUMBS_SEARXNG_URL` at it, then check a full search tier run against it (provider is built and tested against fake responses only)
+- [ ] Re-measure DuckDuckGo from a different network (2026-10-09: from this IP one query works and the next, a minute or two later, is blocked, same pattern as before. A browser on the same network gets results from html.duckduckgo.com, so the IP is not banned and the script is what gets flagged). One check query, then `tools/measure_ddg.py --paces 10,5,2.5 --per-pace 20`. If a fresh IP takes the slow paces, the 8 second default is right. If not, make a Brave key the recommended route
 - [ ] hunter.io plugin: emails and the address pattern for the domain (**needs a key**, small free tier)
 - [ ] Shared helper for the internet scanners, then short plugins on top: Shodan, Censys, Netlas, ONYPHE, BinaryEdge, ZoomEye, FOFA, FullHunt, LeakIX (**each needs a key**)
 - [ ] Live-verify the HIBP and DeHashed plugins, they were built from the vendors' docs and fake responses (**needs keys**)
@@ -15,7 +16,7 @@ In order. Items marked **needs a key** can wait until there is one, so skip down
 - [ ] Vulners plugin: turn product and version strings from the tech findings into known CVEs
 - [ ] IntelX credential source, following the no-password rule
 - [ ] PublicWWW plugin for tech and shared tracking IDs (paid API)
-- [ ] More search providers (Bing, SearXNG) as a fallback for DDG throttling
+- [ ] More search providers (Bing) as a fallback for DDG throttling
 - [ ] Optional opt-in to keep plaintext secrets, with masked exports, if a real engagement needs it
 - [ ] Optional config flag to relax the authorization gate
 
