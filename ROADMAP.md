@@ -8,7 +8,6 @@ In order. Items marked **needs a key** can wait until there is one, so skip down
 - [ ] hunter.io plugin: emails and the address pattern for the domain (**needs a key**, small free tier)
 - [ ] Shared helper for the internet scanners, then short plugins on top: Shodan, Censys, Netlas, ONYPHE, BinaryEdge, ZoomEye, FOFA, FullHunt, LeakIX (**each needs a key**)
 - [ ] Live-verify the HIBP and DeHashed plugins, they were built from the vendors' docs and fake responses (**needs keys**)
-- [ ] Add the dashboard sanitization check (script tags, javascript: URLs) to pytest, it is manual today
 - [ ] Decide whether to keep the Firefox-style default user agent, the README discloses it
 
 ## Backlog
@@ -30,5 +29,6 @@ The full list of candidate sources, and where each one fits, is in [docs/DATA-SO
 - [x] Refuse unknown Host and cross-site Origin headers (DNS rebinding)
 - [x] GPL-3.0 licence, responsible use section, CONTRIBUTING.md, repo public (2026-10-08)
 - [x] urlscan.io plugin (2026-10-09): hosts, IPs grouped by network, and server software from public scans. Checked against the live API, no key needed
+- [x] Dashboard safety tests (2026-10-09): a source check plus a real browser test with hostile findings, both proven to catch deliberate breakage
 - [x] GitHub code search plugin (2026-10-09): public repos, hostnames and addresses that mention the domain, no code kept, private repos dropped. Checked against the live API
 - [x] Catalog of 24 pentester search engines mapped to Shadowcrumbs categories, pushed (2026-10-09)

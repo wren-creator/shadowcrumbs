@@ -9,7 +9,7 @@ These are the few things I won't bend on, mostly because this tool handles clien
 1. **Authorized use only.** Shadowcrumbs is for engagements you have written permission to test, and your own systems. Don't contribute anything aimed at getting around the authorization gate or hiding what the tool does.
 2. **Never store a password.** Not plaintext, not a prefix, not a masked hint with real characters in it. Credential sources record the address, where it was exposed, and what kind of secret leaked (plaintext and its length, or what sort of hash). `shadowcrumbs/plugins/credential_plugins.py` shows how, and `tests/test_credentials.py` has the test that plants a password and checks it never shows up anywhere. Keep that test passing.
 3. **No real client data, ever.** Tests, fixtures, screenshots and issues use the fictional Acme Demo Corp on a `.test` domain. Don't paste real findings into an issue, even redacted.
-4. **The dashboard renders text, never HTML.** Everything scraped from the web goes through `textContent`. No `innerHTML`, and only `http` and `https` links. A hostile web page is a normal input for this tool, so keep that wall up if you touch `static/app.js`.
+4. **The dashboard renders text, never HTML.** Everything scraped from the web goes through `textContent`. No `innerHTML`, and only `http` and `https` links. A hostile web page is a normal input for this tool, so keep that wall up if you touch `static/app.js`. `tests/test_dashboard_safety.py` checks it, in a real browser if you have Chromium (`playwright install chromium`).
 5. **Be polite to the sites we search.** DuckDuckGo blocks fast and for a long time. Don't lower the default search pace (8 seconds, 5 to 10 is the safe range) and don't add retries that hammer a blocked engine. Tests never touch the live internet.
 
 ## Getting set up
@@ -23,7 +23,7 @@ python3 -m venv .venv
 ./start.sh --demo     # fictional data, no network, open http://127.0.0.1:8470
 ```
 
-All the tests should pass before you start, and again before you open a pull request.
+All the tests should pass before you start (the browser test skips itself if there is no Chromium), and again before you open a pull request.
 
 ## Adding a data source
 
@@ -57,7 +57,6 @@ The [ROADMAP](ROADMAP.md) is the honest list. Right now I'd especially like:
 - More search providers, so DuckDuckGo throttling stops being the weak spot.
 - Live verification of the HIBP and DeHashed plugins. They were built from the vendors' docs and tested against fake responses, so someone with keys will probably find a field name that needs fixing.
 - Better tech signatures in `shadowcrumbs/signatures.py`. A row per product is all it takes.
-- A test for the dashboard's no-HTML rule. Today I check it by hand.
 - Anything that breaks. An issue with the steps to reproduce is a real contribution.
 
 ## Pull requests
