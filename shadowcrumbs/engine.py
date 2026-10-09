@@ -64,7 +64,7 @@ def execute(slug, tier, names=None, progress=None):
         progress(current=None, done=len(plugins), total=len(plugins))
     summary["searches_live"] = search.live_queries
     summary["searches_cached"] = search.cached_queries
-    summary["throttle_waits"] = search.throttle_waits
+    summary["search_blocked"] = search.blocked
     return summary
 
 

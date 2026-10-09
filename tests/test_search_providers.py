@@ -3,9 +3,12 @@
 This pins the parsing logic. The first live run (2026-10-07) confirmed the layout, plus one surprise: sponsored results. It does not prove DuckDuckGo still serves this layout, so if live
 searches come back empty, compare a real response with SAMPLE below first.
 """
+import json
+import time
+
 import pytest
 
-from shadowcrumbs import search
+from shadowcrumbs import config, search
 
 SAMPLE = """
 <html><body>
@@ -64,57 +67,72 @@ def test_provider_selection(monkeypatch):
     assert search.make_provider("deep").name == "brave"   # deep dive upgrades to the API
 
 
-class Flaky:
-    """Throttles the first `blocks` calls, then answers."""
+class Blocking:
+    """A provider that is throttled from the first call (or after `ok` good ones)."""
 
-    def __init__(self, blocks):
-        self.blocks, self.calls = blocks, 0
+    def __init__(self, name="ddg", ok=0):
+        self.name, self.ok, self.calls = name, ok, 0
 
     def search(self, query, n):
         self.calls += 1
-        if self.calls <= self.blocks:
-            raise search.SearchBlocked("slow down")
-        return [search.Result("t", "https://x.test/", "s")]
+        if self.calls <= self.ok:
+            return [search.Result("t", "https://x.test/", "s")]
+        raise search.SearchBlocked("slow down")
 
 
-def _client(provider, monkeypatch, backoff="60,120,240", delay=8):
-    monkeypatch.setenv("SHADOWCRUMBS_BACKOFF", backoff)
-    sleeps = []
-    return search.SearchClient(provider, None, delay=delay, sleep=sleeps.append), sleeps
+def _client(provider, delay=0):
+    return search.SearchClient(provider, None, delay=delay, sleep=lambda s: None)
 
 
-def test_throttle_cools_off_then_recovers(monkeypatch):
-    c, sleeps = _client(Flaky(2), monkeypatch)
-    assert len(c.search("q")) == 1
-    assert c.throttle_waits == 2
-    assert 60 in sleeps and 120 in sleeps          # the cool-offs, in schedule order
-    assert c.delay == 32                           # 8 doubled twice, and it stays slower for the rest of the run
-    assert not c.blocked
-
-
-def test_throttle_gives_up_and_stops_hammering(monkeypatch):
-    p = Flaky(99)
-    c, _ = _client(p, monkeypatch)
-    with pytest.raises(search.SearchBlocked):
-        c.search("q1")
-    assert p.calls == 4 and c.blocked              # first try plus three retries
+def test_first_throttle_stops_live_searching_for_the_run():
+    p = Blocking(ok=1)
+    c = _client(p)
+    assert len(c.search("q1")) == 1
     with pytest.raises(search.SearchBlocked):
         c.search("q2")
-    assert p.calls == 4                            # the circuit is open, no more requests sent
-
-
-def test_backoff_can_be_turned_off(monkeypatch):
-    p = Flaky(99)
-    c, sleeps = _client(p, monkeypatch, backoff="0")
+    assert c.blocked and p.calls == 2
     with pytest.raises(search.SearchBlocked):
-        c.search("q")
-    assert p.calls == 1 and c.throttle_waits == 0
+        c.search("q3")
+    assert p.calls == 2                              # no retries, nothing sent while blocked
 
 
-def test_delay_never_climbs_past_the_cap(monkeypatch):
-    c, _ = _client(Flaky(3), monkeypatch, delay=40)
-    c.search("q")
-    assert c.delay == search.MAX_DELAY
+def test_a_block_is_remembered_and_the_next_run_stays_quiet():
+    first = Blocking()
+    with pytest.raises(search.SearchBlocked):
+        _client(first).search("q")
+    assert config.block_marker().exists()
+    later = Blocking(ok=99)                          # the engine has recovered, but we do not know that
+    with pytest.raises(search.SearchBlocked, match="blocked this IP .* minutes ago"):
+        _client(later).search("q")
+    assert later.calls == 0                          # not one request went out
+
+
+def test_staying_quiet_ends_after_the_cooldown(monkeypatch):
+    config.block_marker().parent.mkdir(parents=True, exist_ok=True)
+    config.block_marker().write_text(json.dumps({"at": time.time() - 61 * 60}))
+    p = Blocking(ok=99)
+    assert len(_client(p).search("q")) == 1
+    assert not config.block_marker().exists()        # a good answer clears the memory
+
+
+def test_the_override_lets_you_try_anyway(monkeypatch):
+    config.block_marker().parent.mkdir(parents=True, exist_ok=True)
+    config.block_marker().write_text(json.dumps({"at": time.time()}))
+    monkeypatch.setenv("SHADOWCRUMBS_IGNORE_BLOCK", "1")
+    assert len(_client(Blocking(ok=99)).search("q")) == 1
+
+
+def test_only_ddg_blocks_are_remembered():
+    with pytest.raises(search.SearchBlocked):
+        _client(Blocking(name="brave")).search("q")
+    assert not config.block_marker().exists()        # a Brave rate limit says nothing about DDG
+
+
+def test_cooldown_length_is_configurable(monkeypatch):
+    config.block_marker().parent.mkdir(parents=True, exist_ok=True)
+    config.block_marker().write_text(json.dumps({"at": time.time() - 10 * 60}))
+    monkeypatch.setenv("SHADOWCRUMBS_BLOCK_MINUTES", "5")
+    assert len(_client(Blocking(ok=99)).search("q")) == 1
 
 
 def test_fixture_provider_is_not_paced(monkeypatch, tmp_path):

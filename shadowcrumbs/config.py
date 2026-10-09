@@ -45,10 +45,14 @@ def search_delay() -> float:
     return float(os.environ.get("SHADOWCRUMBS_SEARCH_DELAY", "8"))
 
 
-def search_backoff() -> list[float]:
-    """Seconds to cool off after each consecutive throttle, in order. Empty or 0 turns retrying off."""
-    raw = os.environ.get("SHADOWCRUMBS_BACKOFF", "60,120,240")
-    return [float(x) for x in raw.split(",") if x.strip() and float(x) > 0]
+def block_minutes() -> float:
+    """How long to stay quiet after a search engine throttles us. DuckDuckGo blocks have run an hour or more."""
+    return float(os.environ.get("SHADOWCRUMBS_BLOCK_MINUTES", "60"))
+
+
+def block_marker() -> Path:
+    """Remembers when the search engine last blocked this machine. It is about the IP, so it is not per engagement."""
+    return data_dir() / "search_blocked.json"
 
 
 def http_timeout() -> float:

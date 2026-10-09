@@ -20,7 +20,6 @@ from bs4 import BeautifulSoup
 from . import config
 
 CACHE_TTL = 7 * 24 * 3600
-MAX_DELAY = 60.0   # the adaptive delay never climbs past this
 
 
 @dataclass
@@ -46,7 +45,8 @@ class DuckDuckGoHTML:
         )
         if r.status_code in (202, 403, 429) or "anomaly-modal" in r.text:
             raise SearchBlocked(
-                "DuckDuckGo is throttling this IP. Wait a few minutes, raise SHADOWCRUMBS_SEARCH_DELAY, "
+                "DuckDuckGo is throttling this IP. The block usually lasts an hour or more, and retrying can extend it, "
+                "so stop here. Wait it out, keep SHADOWCRUMBS_SEARCH_DELAY at 5 to 10 seconds, "
                 "or set BRAVE_API_KEY and run a deep dive."
             )
         r.raise_for_status()
@@ -146,8 +146,7 @@ class SearchClient:
         self._last = 0.0
         self.live_queries = 0
         self.cached_queries = 0
-        self.throttle_waits = 0
-        self.blocked = False   # once the engine will not budge, stop hammering it for the rest of the run
+        self.blocked = False   # one throttle ends live searching for the rest of this run
 
     def search(self, query, n=20):
         if self.store:
@@ -167,17 +166,41 @@ class SearchClient:
         return results
 
     def _live(self, query, n):
-        """One live query. On a throttle: cool off, slow the pace for good, retry. Give up after the schedule runs out."""
-        waits = config.search_backoff()
-        for attempt in range(len(waits) + 1):
-            if self.blocked:
-                raise SearchBlocked("Search engine still throttling after cooling off, skipping the rest of this run.")
-            try:
-                return self.provider.search(query, n)
-            except SearchBlocked:
-                if attempt == len(waits):
-                    self.blocked = True
-                    raise
-                self.throttle_waits += 1
-                self.delay = min(max(self.delay, 1.0) * 2, MAX_DELAY)
-                self._sleep(waits[attempt])
+        """One live query. A throttle ends live searching for this run and is remembered across runs.
+
+        Retrying does not help: DuckDuckGo blocks run an hour or more, and every request sent while blocked
+        may extend it. So the first block stops everything, and the next run stays quiet until the cooldown passes.
+        """
+        if self.blocked:
+            raise SearchBlocked("Search engine is throttling this IP, skipping the rest of this run.")
+        if self.provider.name == "ddg":
+            self._respect_earlier_block()
+        try:
+            results = self.provider.search(query, n)
+        except SearchBlocked:
+            self.blocked = True
+            if self.provider.name == "ddg":
+                marker = config.block_marker()
+                marker.parent.mkdir(parents=True, exist_ok=True)
+                marker.write_text(json.dumps({"at": time.time()}))
+            raise
+        if self.provider.name == "ddg":
+            config.block_marker().unlink(missing_ok=True)
+        return results
+
+    def _respect_earlier_block(self):
+        marker = config.block_marker()
+        if os.environ.get("SHADOWCRUMBS_IGNORE_BLOCK") or not marker.exists():
+            return
+        try:
+            at = json.loads(marker.read_text())["at"]
+        except (ValueError, KeyError, OSError):
+            return
+        left = config.block_minutes() * 60 - (time.time() - at)
+        if left > 0:
+            self.blocked = True
+            raise SearchBlocked(
+                f"DuckDuckGo blocked this IP {int((time.time() - at) / 60)} minutes ago. Staying quiet for another "
+                f"{int(left / 60) + 1} minutes, because searching while blocked can extend it. "
+                "Set SHADOWCRUMBS_IGNORE_BLOCK=1 to try anyway, or use a Brave key."
+            )

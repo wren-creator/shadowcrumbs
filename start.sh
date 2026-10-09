@@ -21,7 +21,8 @@ Usage: ./start.sh [switches]
   -h, --help     this text
 
 Environment passed through if set: BRAVE_API_KEY, HIBP_API_KEY, DEHASHED_API_KEY,
-SHADOWCRUMBS_BREACH_FILE, SHADOWCRUMBS_BACKOFF, SHADOWCRUMBS_DATA, SHADOWCRUMBS_UA.
+SHADOWCRUMBS_BREACH_FILE, SHADOWCRUMBS_BLOCK_MINUTES, SHADOWCRUMBS_IGNORE_BLOCK,
+SHADOWCRUMBS_DATA, SHADOWCRUMBS_UA.
 Binds to localhost only, on purpose. The data is client confidential.
 USAGE
 }
