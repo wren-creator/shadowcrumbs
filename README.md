@@ -48,7 +48,7 @@ Just want to show it off? Open `docs/mockup.html` in any browser. It is the real
 
 1. **New engagement.** Name, plus any of company, domain, IP or CIDR. That's the tab.
 2. **Search tier.** Runs on search engine results only. Nothing touches the client. Every query is cached per engagement, so re-runs are free and quiet.
-3. **Deep dive.** Direct lookups and live requests: DNS, RDAP, certificate transparency, public urlscan.io scans, subdomain resolution with dangling CNAME checks, an HTTP probe, and metadata from the documents you found. Flip the toggle when search has given you what it can.
+3. **Deep dive.** Direct lookups and live requests: DNS, RDAP, certificate transparency, public urlscan.io scans, GitHub code search, subdomain resolution with dangling CNAME checks, an HTTP probe, and metadata from the documents you found. Flip the toggle when search has given you what it can.
 4. **Triage.** Mark findings verified, drop the junk, filter the list.
 5. **Export.** Markdown, PDF, or JSON, with scope and run history baked in.
 
@@ -86,6 +86,12 @@ There is a reference list of other services worth wiring in, with where each one
 Categories are `employees`, `emails`, `documents`, `tech`, `subdomains`, `infrastructure`. A plugin that crashes gets logged in run history and the rest carry on. A plugin file that fails to load shows up in the dashboard instead of taking the app down.
 
 Tech signatures live in `shadowcrumbs/signatures.py`. Add a row for any product you want flagged. The list already leans toward IBM i, z/OS, z/TPF, RACF, and the common PLC and SCADA vendors.
+
+## API keys and tokens
+
+Keys live in environment variables, never in a file inside this repo: `BRAVE_API_KEY`, `HIBP_API_KEY`, `DEHASHED_API_KEY`, `URLSCAN_API_KEY` (optional), `GITHUB_TOKEN`. `.env` files are gitignored as a backstop, and GitHub secret scanning is on for the repo. Shadowcrumbs only ever puts a key in the request header that needs it. It never writes one to a finding, a log, the query cache, or an error message, and the tests check that.
+
+For `github_code_search`, make a **fine-grained token with read access to public repositories only**, no private repo access. A broader token such as the one from `gh auth token` can make GitHub's search return hits from your own private repos. The plugin drops anything that is not public, but a token that cannot see private code in the first place is the better guard. The plugin keeps only the repo, file path, hostnames and addresses from a hit, never the code itself, because public repos leak secrets and none of that belongs in an engagement database. Code search allows about 10 requests a minute, so a run reads two pages at most.
 
 ## Credential exposure
 

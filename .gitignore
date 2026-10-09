@@ -6,3 +6,6 @@ __pycache__/
 shadowcrumbs.pid
 shadowcrumbs.log
 shadowcrumbs.port
+.env
+.env.*
+*.token

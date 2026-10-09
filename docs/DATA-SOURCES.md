@@ -1,6 +1,6 @@
 # Data sources: the pentester's search engine list
 
-A reference list of 24 services pentesters lean on for recon, and where each one could plug into Shadowcrumbs. crt.sh and urlscan.io are built today. The rest are a menu, so pick what you have keys for and write the plugin. See [CONTRIBUTING.md](../CONTRIBUTING.md).
+A reference list of 24 services pentesters lean on for recon, and where each one could plug into Shadowcrumbs. crt.sh, urlscan.io and GitHub code search are built today. The rest are a menu, so pick what you have keys for and write the plugin. See [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 I wrote the notes from what I know of these services. Free tiers, pricing and terms change, so check each one's current docs before you build on it. Nothing here has been tested against the live service.
 
@@ -16,6 +16,7 @@ Keys come from environment variables, one per service, and a source without its 
 |---|---|---|---|
 | 22 | crt.sh | Certificate transparency search | `crtsh` plugin, deep tier, no key |
 | 16 | urlscan.io | Hosts, IPs and server software from public scans of the domain | `urlscan_search` plugin, deep tier, no key needed. The free search reaches back 30 days, and `URLSCAN_API_KEY` raises the limits. Response shape and rate limits checked against the live API on 2026-10-09 |
+| n/a | GitHub code search (not on the original list) | Public code that mentions the domain: repos, hostnames, addresses, config-like files | `github_code_search` plugin, deep tier, needs `GITHUB_TOKEN`. Checked against the live API on 2026-10-09. Keeps no code, drops private repos and vendored library copies |
 | 2 | google.com | Dork queries | The search tier already runs dork style queries (`site:`, `filetype:`, quoted `@domain`) through DuckDuckGo, and through Brave on a deep dive |
 
 ## Good fits, worth building
@@ -24,7 +25,6 @@ Keys come from environment variables, one per service, and a source without its 
 |---|---|---|---|---|
 | 9 | hunter.io | Email addresses at a domain, plus the address pattern | `emails` | API key, small free tier |
 | 4 | grep.app | Code search across public repos, for the domain's name in configs and leaked secrets | `infrastructure` | No official API, use with care |
-| n/a | GitHub code search (not on the original list) | Public code that mentions the domain: configs, scripts, leaked hostnames. An official, stable API, unlike grep.app | `infrastructure`, `subdomains`, `emails` | A GitHub token (`GITHUB_TOKEN`, free), about 10 searches a minute |
 | 1 | shodan.io | Hosts and open services on the client's addresses | `infrastructure`, `tech` | API key |
 | 8 | censys.io | Hosts, services and certificates | `infrastructure`, `subdomains` | API id and secret |
 | 14 | app.netlas.io | Same family: internet scan data | `infrastructure` | API key |

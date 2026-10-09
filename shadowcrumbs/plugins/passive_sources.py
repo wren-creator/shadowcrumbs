@@ -3,6 +3,8 @@
 They do tell the outside service which domain you are asking about, so each description says so.
 """
 import os
+import re
+import time
 
 from ..plugin import Finding, Plugin, register
 from ..signatures import scan
@@ -84,3 +86,104 @@ class UrlscanSearch(Plugin):
         rows = r.json().get("results") or []
         ctx.store.cache_put(cache_key, rows)
         return rows
+
+
+GITHUB_TTL = 24 * 3600
+GITHUB_PAGE_PAUSE = 6.5     # code search allows about 10 requests a minute
+GITHUB_PAGES = 2
+GITHUB_MAX_REPOS = 50
+VENDORED = re.compile(r"(^|/)(site-packages|node_modules|\.?venv|[a-z]*venv|vendor|third_party|\.git)/", re.I)
+CONFIG_LIKE = re.compile(
+    r"(\.env|config|credential|secret|settings|\.pem$|\.key$|id_rsa|\.npmrc|\.pgpass|\.tfvars|docker-compose|"
+    r"\.ya?ml$|\.ini$|\.properties$|\.conf$)", re.I)
+
+
+@register
+class GithubCodeSearch(Plugin):
+    name = "github_code_search"
+    tier = "deep"
+    description = (
+        "Public GitHub code that mentions the domain: repos, hostnames and addresses found in it, and config-like files "
+        "worth a look. Sends the domain to GitHub. Needs a free GITHUB_TOKEN. Keeps only repo, path, hostnames and "
+        "addresses, never the code itself."
+    )
+    categories = ("infrastructure", "subdomains", "emails")
+    needs_any = ("domain",)
+    order = 37
+
+    def unavailable(self):
+        return None if os.environ.get("GITHUB_TOKEN") else "needs GITHUB_TOKEN"
+
+    def run(self, ctx):
+        d = ctx.target["domain"]
+        repos = {}
+        hosts, emails = {}, {}
+        for hit in self._search(ctx, d):
+            if VENDORED.search(hit["path"]):        # copies of other people's libraries say nothing about the client
+                continue
+            repo = repos.setdefault(hit["repo"], {"paths": [], "url": hit["url"], "config": False})
+            repo["paths"].append(hit["path"])
+            repo["config"] = repo["config"] or bool(CONFIG_LIKE.search(hit["path"]))
+            for h in hit["hosts"]:
+                hosts.setdefault(h, hit["repo"])
+            for e in hit["emails"]:
+                emails.setdefault(e, hit["repo"])
+        for name, r in sorted(repos.items())[:GITHUB_MAX_REPOS]:
+            sample = ", ".join(r["paths"][:3]) + (f" and {len(r['paths']) - 3} more" if len(r["paths"]) > 3 else "")
+            n = len(r["paths"])
+            note = f"{n} file{'s' if n != 1 else ''} mention{'' if n != 1 else 's'} the domain: {sample}."
+            if r["config"]:
+                note += " Includes config-like files, worth a look by hand."
+            yield Finding("infrastructure", f"Public code mentions {d}: {name}", url=r["url"],
+                          confidence=55 if r["config"] else 40, notes=clip(note, 900))
+        for h, repo in sorted(hosts.items()):
+            if h != d:
+                yield Finding("subdomains", h, url=f"https://github.com/{repo}", confidence=55,
+                              notes=f"Named in public code in {repo}.")
+        for e, repo in sorted(emails.items()):
+            yield Finding("emails", e, url=f"https://github.com/{repo}", confidence=55,
+                          notes=f"Named in public code in {repo}.")
+
+    def _search(self, ctx, d):
+        """Hits reduced to repo, path, link, hostnames and addresses. The code fragments are dropped before
+        anything is cached, because public repos leak secrets and none of that belongs in an engagement database."""
+        cache_key = f"github_code:{d}"
+        cached = ctx.store.cache_get(cache_key, GITHUB_TTL)
+        if cached is not None:
+            return cached
+        host_re = re.compile(r"(?<![A-Za-z0-9.-])((?:[A-Za-z0-9-]+\.)*" + re.escape(d) + r")(?![A-Za-z0-9-])", re.I)
+        mail_re = re.compile(r"[A-Za-z0-9._%+-]+@" + re.escape(d) + r"(?![A-Za-z0-9-])", re.I)
+        hits = []
+        for page in range(1, GITHUB_PAGES + 1):
+            if page > 1:
+                time.sleep(GITHUB_PAGE_PAUSE)
+            r = ctx.http.get(
+                "https://api.github.com/search/code",
+                params={"q": f'"{d}"', "per_page": 100, "page": page},
+                headers={"Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}", "User-Agent": "Shadowcrumbs",
+                         "Accept": "application/vnd.github.text-match+json", "X-GitHub-Api-Version": "2022-11-28"},
+            )
+            if r.status_code == 401:
+                raise RuntimeError("GitHub rejected the token (401). Check GITHUB_TOKEN.")
+            if r.status_code in (403, 429):
+                wait = r.headers.get("Retry-After") or r.headers.get("X-RateLimit-Reset") or "a minute"
+                raise RuntimeError(f"GitHub refused the search (rate limit or no access, {r.status_code}). Wait and retry ({wait}).")
+            if r.status_code == 422:
+                raise RuntimeError("GitHub rejected the search query. Is the target domain valid?")
+            r.raise_for_status()
+            body = r.json()
+            for item in body.get("items") or []:
+                repo = item.get("repository") or {}
+                # A token with private repo access can see private code in search. Only public code is a finding.
+                if repo.get("fork") or not repo.get("full_name") or repo.get("private") or repo.get("visibility") not in (None, "public"):
+                    continue
+                text = " ".join(m.get("fragment", "") for m in item.get("text_matches") or [])
+                hits.append({
+                    "repo": repo["full_name"], "path": item.get("path", ""), "url": item.get("html_url", ""),
+                    "hosts": sorted({h.lower() for h in host_re.findall(text) if in_domain(h.lower(), d)}),
+                    "emails": sorted({e.lower() for e in mail_re.findall(text)}),
+                })
+            if len(body.get("items") or []) < 100:
+                break
+        ctx.store.cache_put(cache_key, hits)
+        return hits

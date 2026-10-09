@@ -20,7 +20,7 @@ Usage: ./start.sh [switches]
   --status       say whether it is running and exit
   -h, --help     this text
 
-Environment passed through if set: BRAVE_API_KEY, HIBP_API_KEY, DEHASHED_API_KEY, URLSCAN_API_KEY,
+Environment passed through if set: BRAVE_API_KEY, HIBP_API_KEY, DEHASHED_API_KEY, URLSCAN_API_KEY, GITHUB_TOKEN,
 SHADOWCRUMBS_BREACH_FILE, SHADOWCRUMBS_BLOCK_MINUTES, SHADOWCRUMBS_IGNORE_BLOCK,
 SHADOWCRUMBS_DATA, SHADOWCRUMBS_UA.
 Binds to localhost only, on purpose. The data is client confidential.
