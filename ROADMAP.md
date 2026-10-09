@@ -1,14 +1,35 @@
 # Roadmap
 
-- [x] Verify the DuckDuckGo parser against the live site (2026-10-07: layout confirmed, sponsored results now filtered)
-- [x] Handle DDG throttling: stop on the first block and stay quiet for an hour (blocks measured at 50+ minutes, retrying cannot help)
-- [ ] Re-run `tools/measure_ddg.py` once the IP is clear, with sparse probes, to learn the true cooldown and whether polling extends it
-- [x] Credentials/breach sources: HIBP, DeHashed, local feed import (2026-10-07), never stores passwords
-- [ ] Verify the HIBP and DeHashed plugins against the live services once there are keys (built against docs and fake responses)
-- [ ] Optional opt-in to keep plaintext secrets, with masked exports, if a real engagement needs it
-- [ ] More search providers (Bing, SearXNG) as a fallback for DDG throttling
-- [ ] Optional config flag to relax the authorization gate
-- [ ] Add the dashboard sanitization check (script tags, javascript: URLs) to pytest, currently manual
-- [ ] Data sources from the pentester search engine list, see [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md): hunter.io for emails, urlscan.io and searchcode.com (no key needed), then a shared helper plus short plugins for the internet scanners (Shodan, Censys, Netlas, ONYPHE, BinaryEdge, ZoomEye, FOFA, FullHunt, LeakIX)
+## Next up (start 2026-10-09)
+
+In order. Items marked **needs a key** can wait until there is one, so skip down the list.
+
+- [ ] Push the data source catalog (`docs/DATA-SOURCES.md`), it is committed but not on GitHub yet
+- [ ] Check whether the DuckDuckGo block has cleared with a single query, then re-run `tools/measure_ddg.py` with sparse probes to learn the true cooldown and whether polling extends it
+- [ ] urlscan.io plugin: past scans of the domain give pages, hosts, IPs and technologies (free, no key needed)
+- [ ] searchcode.com plugin: code search for the domain in public repos (no key needed)
+- [ ] hunter.io plugin: emails and the address pattern for the domain (**needs a key**, small free tier)
+- [ ] Shared helper for the internet scanners, then short plugins on top: Shodan, Censys, Netlas, ONYPHE, BinaryEdge, ZoomEye, FOFA, FullHunt, LeakIX (**each needs a key**)
+- [ ] Live-verify the HIBP and DeHashed plugins, they were built from the vendors' docs and fake responses (**needs keys**)
+- [ ] Add the dashboard sanitization check (script tags, javascript: URLs) to pytest, it is manual today
+- [ ] Decide whether to keep the Firefox-style default user agent, the README discloses it
+
+## Backlog
+
 - [ ] Vulners plugin: turn product and version strings from the tech findings into known CVEs
 - [ ] IntelX credential source, following the no-password rule
+- [ ] PublicWWW plugin for tech and shared tracking IDs (paid API)
+- [ ] More search providers (Bing, SearXNG) as a fallback for DDG throttling
+- [ ] Optional opt-in to keep plaintext secrets, with masked exports, if a real engagement needs it
+- [ ] Optional config flag to relax the authorization gate
+
+The full list of candidate sources, and where each one fits, is in [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md).
+
+## Done
+
+- [x] Verify the DuckDuckGo parser against the live site (2026-10-07: layout confirmed, sponsored results now filtered)
+- [x] Handle DDG throttling: stop on the first block and stay quiet for an hour (blocks measured at 50+ minutes, retrying cannot help)
+- [x] Credentials/breach sources: HIBP, DeHashed, local feed import (2026-10-07), never stores passwords
+- [x] Refuse unknown Host and cross-site Origin headers (DNS rebinding)
+- [x] GPL-3.0 licence, responsible use section, CONTRIBUTING.md, repo public (2026-10-08)
+- [x] Catalog of 24 pentester search engines mapped to Shadowcrumbs categories
