@@ -147,7 +147,7 @@ tests/                       pytest suite
 .venv/bin/python -m pytest
 ```
 
-Planned work lives in [ROADMAP.md](ROADMAP.md).
+Planned work lives in [ROADMAP.md](ROADMAP.md). Want to add a data source or fix something? Start with [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Covers the store, every plugin, the scope gate, failure handling, all three exports, and the API. Hostile input is in there too: booby-trapped Office files and throttled search.
 
