@@ -4,6 +4,17 @@ The crumbs a company leaves behind, collected in one place before you ever touch
 
 Give it a company name, a domain, or an IP range. It pulls what search engines already know: subdomains, exposed documents, email addresses and their format, employee names and titles, and the tech stack people brag about in job posts and LinkedIn blurbs. Every client gets its own tab and its own database. Export the lot as Markdown, PDF, or JSON when it's time to write it up.
 
+## Use it on engagements you are authorized for
+
+This is a recon tool. Point it only at companies and domains you have written permission to test, or your own. Two parts of it deserve a straight word:
+
+- **It collects personal information.** The search tier pulls employee names and job titles out of public search listings, and the email sources collect staff addresses. That is normal pen test recon, and it is still personal data. Keep it inside the engagement, protect the exports, and delete it when the engagement closes. If GDPR or similar rules apply to you, they apply to this.
+- **The credential sources send data to third parties.** `hibp_breaches` and `dehashed_domain` ship the addresses you found to Have I Been Pwned and DeHashed. They stay off until you set a key, and no password is ever stored.
+
+The deep dive tier, the part that sends traffic to the target, stays locked until you record an authorization reference (SOW, ROE, ticket). It will not stop anyone determined to misuse it, and it is not meant to. It is there to make you answer the paperwork question first. How you use the tool is on you.
+
+Licensed GPL-3.0, see [LICENSE](LICENSE). No warranty, as the licence says.
+
 ## Run it
 
 ```bash
@@ -96,7 +107,7 @@ Heads up: HIBP and DeHashed are third parties. Running them sends the addresses 
 | `brave` | Deep dive, automatically, when the key exists | `BRAVE_API_KEY` |
 | `fixture` | Demos and tests | `SHADOWCRUMBS_FIXTURE` |
 
-Other settings: `SHADOWCRUMBS_SEARCH_DELAY` (seconds between live queries, default 8), `SHADOWCRUMBS_BACKOFF` (cool-off schedule in seconds after a throttle, default `60,120,240`, `0` turns retrying off), `SHADOWCRUMBS_DATA` (where engagements live), `SHADOWCRUMBS_UA` (user agent).
+Other settings: `SHADOWCRUMBS_SEARCH_DELAY` (seconds between live queries, default 8), `SHADOWCRUMBS_BACKOFF` (cool-off schedule in seconds after a throttle, default `60,120,240`, `0` turns retrying off), `SHADOWCRUMBS_DATA` (where engagements live), `SHADOWCRUMBS_UA` (user agent, see the limits below), `SHADOWCRUMBS_ALLOWED_HOSTS` (extra Host names the server will answer to, for a reverse proxy).
 
 ## Straight talk on limits
 
@@ -105,7 +116,8 @@ Other settings: `SHADOWCRUMBS_SEARCH_DELAY` (seconds between live queries, defau
 - **Credential lookups need a key or your own feed.** The three sources below are tested against fake API responses and a fake feed, not the live HIBP or DeHashed services (no keys on hand when I built them). Expect to fix a field name or two on your first real call, and tell me what you see.
 - **Confidence scores are rough.** They say how direct the evidence is, nothing more. Verify before you rely on a finding.
 - **Document metadata is the juiciest and the loudest.** It downloads files from the client's own site. That's why it's deep tier.
-- **Not multi-user.** One operator, one machine, no login. Don't put it on a network.
+- **Not multi-user.** One operator, one machine, no login. Don't put it on a network. It also refuses any request that arrives under a Host name other than localhost, or from another site's page, so a web page you happen to browse cannot drive it through DNS rebinding. That is protection for a localhost tool, not a reason to expose it.
+- **The default user agent looks like Firefox.** That is what makes the DuckDuckGo HTML endpoint answer at all, and scraping it is a gray area under their terms. If that bothers you, set `SHADOWCRUMBS_UA` to something honest and expect to be blocked sooner, or use a Brave key and skip the scraping.
 
 ## Layout
 
