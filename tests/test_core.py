@@ -174,3 +174,18 @@ def test_user_plugin_loader(tmp_path, monkeypatch):
         assert "broken.py" in LOAD_ERRORS and "_skipped.py" not in LOAD_ERRORS
     finally:
         REGISTRY.pop("hello_user", None)
+
+
+def test_personal_plugin_folder_loads_alongside_the_normal_one(tmp_path, monkeypatch):
+    from shadowcrumbs import plugin
+    mine = tmp_path / "mine"
+    mine.mkdir()
+    (mine / "private_thing.py").write_text(
+        "from shadowcrumbs.plugin import Plugin, register\n"
+        "@register\nclass PrivateThing(Plugin):\n    name = 'private_thing_test'\n    tier = 'search'\n"
+        "    def run(self, ctx):\n        return iter(())\n"
+    )
+    monkeypatch.setenv("SHADOWCRUMBS_PERSONAL_PLUGINS", str(mine))
+    plugin.load_plugins()
+    assert "private_thing_test" in plugin.REGISTRY
+    plugin.REGISTRY.pop("private_thing_test")

@@ -60,7 +60,7 @@ Sources marked **ACTIVE** in the dashboard send traffic to the client's own syst
 
 ## Adding a data source
 
-Drop a `.py` file in `plugins_user/`. It loads on the next start, no core changes. See `plugins_user/wayback_urls.py` for a working one. The whole contract:
+Drop a `.py` file in `plugins_user/`. It loads on the next start, no core changes. For tools you do not want in a public repo, keep them in a folder of your own and set `SHADOWCRUMBS_PERSONAL_PLUGINS` to it (several folders separated by `:`). Those load too, and never touch this repo. See `plugins_user/wayback_urls.py` for a working one. The whole contract:
 
 ```python
 from shadowcrumbs.plugin import Finding, Plugin, register

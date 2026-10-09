@@ -71,8 +71,9 @@ def load_plugins():
         importlib.import_module(f"{builtin.__name__}.{mod.name}")
 
     LOAD_ERRORS.clear()
-    d = config.user_plugins_dir()
-    if d.is_dir():
+    for d in [config.user_plugins_dir(), *config.personal_plugin_dirs()]:
+        if not d.is_dir():
+            continue
         for f in sorted(d.glob("*.py")):
             if f.name.startswith("_"):
                 continue

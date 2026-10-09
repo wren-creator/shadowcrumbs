@@ -30,6 +30,12 @@ def engagements_dir() -> Path:
     return d
 
 
+def personal_plugin_dirs() -> list[Path]:
+    """Extra plugin folders kept outside this repo (private tools). Separate with the OS path separator."""
+    raw = os.environ.get("SHADOWCRUMBS_PERSONAL_PLUGINS", "")
+    return [Path(p).expanduser() for p in raw.split(os.pathsep) if p.strip()]
+
+
 def user_plugins_dir() -> Path:
     return Path(os.environ.get("SHADOWCRUMBS_PLUGINS", ROOT / "plugins_user"))
 
