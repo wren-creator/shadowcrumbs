@@ -4,7 +4,6 @@
 
 In order. Items marked **needs a key** can wait until there is one, so skip down the list.
 
-- [ ] Run a local SearXNG and point `SHADOWCRUMBS_SEARXNG_URL` at it, then check a full search tier run against it (provider is built and tested against fake responses only)
 - [ ] Re-measure DuckDuckGo from a different network (2026-10-09: from this IP one query works and the next, a minute or two later, is blocked, same pattern as before. A browser on the same network gets results from html.duckduckgo.com, so the IP is not banned and the script is what gets flagged). One check query, then `tools/measure_ddg.py --paces 10,5,2.5 --per-pace 20`. If a fresh IP takes the slow paces, the 8 second default is right. If not, make a Brave key the recommended route
 - [ ] hunter.io plugin: emails and the address pattern for the domain (**needs a key**, small free tier)
 - [ ] Shared helper for the internet scanners, then short plugins on top: Shodan, Censys, Netlas, ONYPHE, BinaryEdge, ZoomEye, FOFA, FullHunt, LeakIX (**each needs a key**)
@@ -33,3 +32,4 @@ The full list of candidate sources, and where each one fits, is in [docs/DATA-SO
 - [x] Dashboard safety tests (2026-10-09): a source check plus a real browser test with hostile findings, both proven to catch deliberate breakage
 - [x] GitHub code search plugin (2026-10-09): public repos, hostnames and addresses that mention the domain, no code kept, private repos dropped. Checked against the live API
 - [x] Catalog of 24 pentester search engines mapped to Shadowcrumbs categories, pushed (2026-10-09)
+- [x] SearXNG provider plus `tools/searxng.sh` (2026-10-09): local Docker instance, checked live. Only one upstream engine answered from this network, the rest were CAPTCHA or suspended

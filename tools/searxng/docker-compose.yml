@@ -1,0 +1,12 @@
+services:
+  searxng:
+    image: searxng/searxng:latest
+    container_name: shadowcrumbs-searxng
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${SEARXNG_PORT:-8888}:8080"     # localhost only, on purpose
+    volumes:
+      - ./settings.yml:/etc/searxng/settings.yml:ro
+    environment:
+      - SEARXNG_SECRET=${SEARXNG_SECRET:?run tools/searxng.sh instead of compose directly}
+      - SEARXNG_BASE_URL=http://127.0.0.1:${SEARXNG_PORT:-8888}/

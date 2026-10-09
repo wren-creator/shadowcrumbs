@@ -9,3 +9,4 @@ shadowcrumbs.port
 .env
 .env.*
 *.token
+tools/searxng/.secret

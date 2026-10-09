@@ -116,6 +116,8 @@ Heads up: HIBP and DeHashed are third parties. Running them sends the addresses 
 | `brave` | Deep dive, automatically, when the key exists | `BRAVE_API_KEY` |
 | `fixture` | Demos and tests | `SHADOWCRUMBS_FIXTURE` |
 
+**Running your own SearXNG.** `./tools/searxng.sh up` starts one in Docker, bound to 127.0.0.1:8888 with JSON output on and a random secret generated on your machine (`tools/searxng/.secret`, gitignored). Then `export SHADOWCRUMBS_SEARXNG_URL=http://127.0.0.1:8888` before `./start.sh`. `./tools/searxng.sh down` stops it. Checked live on 2026-10-09: it returned 10 results per query for `site:`, `filetype:` and `OR` searches. Honest caveat: SearXNG relays to other engines, and from my network DuckDuckGo and Startpage showed it CAPTCHAs and Brave suspended it for too many requests, so one engine did all the answering. Check `unresponsive_engines` in its JSON output if results look thin.
+
 Other settings: `SHADOWCRUMBS_SEARCH_DELAY` (seconds between live queries, default 8), `SHADOWCRUMBS_BLOCK_MINUTES` (how long to stay quiet after DuckDuckGo blocks you, default 60), `SHADOWCRUMBS_IGNORE_BLOCK=1` (try anyway), `SHADOWCRUMBS_DATA` (where engagements live), `SHADOWCRUMBS_UA` (user agent, see the limits below), `SHADOWCRUMBS_ALLOWED_HOSTS` (extra Host names the server will answer to, for a reverse proxy).
 
 ## Straight talk on limits

@@ -1,0 +1,10 @@
+# Minimal SearXNG config for Shadowcrumbs. Everything else comes from SearXNG's defaults.
+use_default_settings: true
+search:
+  formats:
+    - html
+    - json          # Shadowcrumbs reads the JSON output
+server:
+  limiter: false    # private instance on localhost, nobody else can reach it
+  image_proxy: false
+  # secret_key comes from the SEARXNG_SECRET environment variable, see ../searxng.sh
