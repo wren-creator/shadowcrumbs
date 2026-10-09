@@ -48,7 +48,7 @@ Just want to show it off? Open `docs/mockup.html` in any browser. It is the real
 
 1. **New engagement.** Name, plus any of company, domain, IP or CIDR. That's the tab.
 2. **Search tier.** Runs on search engine results only. Nothing touches the client. Every query is cached per engagement, so re-runs are free and quiet.
-3. **Deep dive.** Direct lookups and live requests: DNS, RDAP, certificate transparency, subdomain resolution with dangling CNAME checks, an HTTP probe, and metadata from the documents you found. Flip the toggle when search has given you what it can.
+3. **Deep dive.** Direct lookups and live requests: DNS, RDAP, certificate transparency, public urlscan.io scans, subdomain resolution with dangling CNAME checks, an HTTP probe, and metadata from the documents you found. Flip the toggle when search has given you what it can.
 4. **Triage.** Mark findings verified, drop the junk, filter the list.
 5. **Export.** Markdown, PDF, or JSON, with scope and run history baked in.
 

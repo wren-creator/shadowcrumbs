@@ -1,6 +1,6 @@
 # Data sources: the pentester's search engine list
 
-A reference list of 24 services pentesters lean on for recon, and where each one could plug into Shadowcrumbs. Only crt.sh is built today. The rest are a menu, so pick what you have keys for and write the plugin. See [CONTRIBUTING.md](../CONTRIBUTING.md).
+A reference list of 24 services pentesters lean on for recon, and where each one could plug into Shadowcrumbs. crt.sh and urlscan.io are built today. The rest are a menu, so pick what you have keys for and write the plugin. See [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 I wrote the notes from what I know of these services. Free tiers, pricing and terms change, so check each one's current docs before you build on it. Nothing here has been tested against the live service.
 
@@ -15,6 +15,7 @@ Keys come from environment variables, one per service, and a source without its 
 | # | Service | What it is | Where it lives |
 |---|---|---|---|
 | 22 | crt.sh | Certificate transparency search | `crtsh` plugin, deep tier, no key |
+| 16 | urlscan.io | Hosts, IPs and server software from public scans of the domain | `urlscan_search` plugin, deep tier, no key needed. The free search reaches back 30 days, and `URLSCAN_API_KEY` raises the limits. Response shape and rate limits checked against the live API on 2026-10-09 |
 | 2 | google.com | Dork queries | The search tier already runs dork style queries (`site:`, `filetype:`, quoted `@domain`) through DuckDuckGo, and through Brave on a deep dive |
 
 ## Good fits, worth building
@@ -22,7 +23,6 @@ Keys come from environment variables, one per service, and a source without its 
 | # | Service | Best for | Shadowcrumbs category | Needs |
 |---|---|---|---|---|
 | 9 | hunter.io | Email addresses at a domain, plus the address pattern | `emails` | API key, small free tier |
-| 16 | urlscan.io | Past scans of the domain: pages, hosts, IPs, technologies | `infrastructure`, `subdomains`, `tech` | Free API, key raises limits |
 | 4 | grep.app | Code search across public repos, for the domain's name in configs and leaked secrets | `infrastructure` | No official API, use with care |
 | 15 | searchcode.com | The same idea, with a plain JSON API | `infrastructure` | No key |
 | 1 | shodan.io | Hosts and open services on the client's addresses | `infrastructure`, `tech` | API key |

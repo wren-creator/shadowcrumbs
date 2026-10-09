@@ -29,6 +29,14 @@ class FakeHttp:
     def probe(self, host):
         return self.probes.get(host)
 
+    def get(self, url, **kw):
+        """Plain GETs (urlscan.io, say) answer with an empty result set unless a test says otherwise."""
+        class Empty:
+            status_code, headers = 200, {}
+            def json(self): return {"results": []}
+            def raise_for_status(self): pass
+        return Empty()
+
 
 @pytest.fixture
 def store():
