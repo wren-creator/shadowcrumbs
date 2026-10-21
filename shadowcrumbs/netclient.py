@@ -6,6 +6,7 @@ import urllib3
 from bs4 import BeautifulSoup
 
 from . import config
+from .log import safe_url
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -16,6 +17,19 @@ class HttpClient:
         self.session = requests.Session()
         self.session.headers["User-Agent"] = config.user_agent()
         self._last = 0.0
+        self.log = lambda msg, level="info": None   # the engine swaps in the run's event log
+
+    def _logged(self, method, url, send):
+        """Run one request and note method, URL, status and time. Never headers or bodies, they carry keys."""
+        began = time.monotonic()
+        try:
+            r = send()
+        except Exception as e:
+            self.log(f"{method} {safe_url(url)} failed after {time.monotonic() - began:.1f}s: {type(e).__name__}: {e}", "error")
+            raise
+        code = getattr(r, "status_code", "?")
+        self.log(f"{method} {safe_url(url)} -> {code} in {time.monotonic() - began:.1f}s", "warning" if isinstance(code, int) and code >= 400 else "debug")
+        return r
 
     def _pace(self):
         wait = self.delay - (time.monotonic() - self._last)
@@ -25,11 +39,11 @@ class HttpClient:
 
     def get(self, url, timeout=None, **kw):
         self._pace()
-        return self.session.get(url, timeout=timeout or config.http_timeout(), **kw)
+        return self._logged("GET", url, lambda: self.session.get(url, timeout=timeout or config.http_timeout(), **kw))
 
     def post(self, url, timeout=None, **kw):
         self._pace()
-        return self.session.post(url, timeout=timeout or config.http_timeout(), **kw)
+        return self._logged("POST", url, lambda: self.session.post(url, timeout=timeout or config.http_timeout(), **kw))
 
     def get_json(self, url, timeout=None):
         """JSON body, or None on a 404. Other HTTP errors raise."""
@@ -43,7 +57,7 @@ class HttpClient:
         """Fetch a file with a hard size cap. Returns bytes, or None when it is too big."""
         cap = max_bytes or config.MAX_DOWNLOAD_BYTES
         self._pace()
-        with self.session.get(url, stream=True, timeout=config.http_timeout()) as r:
+        with self._logged("GET", url, lambda: self.session.get(url, stream=True, timeout=config.http_timeout())) as r:
             r.raise_for_status()
             declared = int(r.headers.get("Content-Length") or 0)
             if declared > cap:
@@ -60,10 +74,10 @@ class HttpClient:
         for scheme in ("https", "http"):
             try:
                 self._pace()
-                r = self.session.get(
+                r = self._logged("GET", f"{scheme}://{host}/", lambda: self.session.get(
                     f"{scheme}://{host}/", timeout=config.http_timeout(), verify=False,
                     allow_redirects=True, stream=True,
-                )
+                ))
             except requests.RequestException:
                 continue
             try:

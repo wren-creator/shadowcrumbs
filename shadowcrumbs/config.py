@@ -30,6 +30,17 @@ def engagements_dir() -> Path:
     return d
 
 
+def logs_dir() -> Path:
+    d = data_dir() / "logs"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def log_level() -> str:
+    """INFO records lifecycle, searches and failures. DEBUG adds every HTTP request and cache hit."""
+    return os.environ.get("SHADOWCRUMBS_LOG_LEVEL", "INFO").strip().upper() or "INFO"
+
+
 def personal_plugin_dirs() -> list[Path]:
     """Extra plugin folders kept outside this repo (private tools). Separate with the OS path separator."""
     raw = os.environ.get("SHADOWCRUMBS_PERSONAL_PLUGINS", "")

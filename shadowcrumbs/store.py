@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 
 from . import config
+from .log import logger, redact
 from .util import normalize_domain, normalize_ip
 
 SCHEMA = """
@@ -34,6 +35,20 @@ CREATE TABLE IF NOT EXISTS runs (
   found INTEGER NOT NULL DEFAULT 0,
   error TEXT
 );
+CREATE TABLE IF NOT EXISTS authorizations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  action TEXT NOT NULL,
+  auth_ref TEXT NOT NULL DEFAULT '',
+  recorded_by TEXT NOT NULL,
+  recorded_at TEXT
+);
+CREATE TABLE IF NOT EXISTS run_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id INTEGER,
+  at TEXT NOT NULL,
+  level TEXT NOT NULL,
+  message TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS search_cache (
   query TEXT PRIMARY KEY,
   results TEXT NOT NULL,
@@ -48,9 +63,24 @@ def now():
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
+UNSPECIFIED = "unspecified"
+
+
+def clean_person(name):
+    """The name of whoever records an authorization. One line, no control characters, 80 characters at most."""
+    name = re.sub(r"[\x00-\x1f\x7f]+", " ", name or "")
+    return re.sub(r"\s+", " ", name).strip()[:80]
+
+
 def slugify(name):
     s = re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")
     return s[:60].strip("-") or "engagement"
+
+
+def audit_log(slug, action, ref, by):
+    """Every ROE change also goes to the app log. The per-engagement table is a convenience, not forensics:
+    anyone who can write to the .db file can change it, and it is deleted with the engagement."""
+    logger().getChild("audit").info("ROE %s: engagement=%s ref=%r by=%r", action, slug, ref, by)
 
 
 def list_slugs():
@@ -65,11 +95,29 @@ class Store:
         self.path = config.engagements_dir() / f"{slug}.db"
         if not self.path.exists():
             raise KeyError(slug)
+        self._ensure_schema()
+
+    def _ensure_schema(self):
+        """Engagements made before a table existed get it on first open. Existing ROE state is backfilled once,
+        with no invented name or time: the old database never recorded either."""
+        c = sqlite3.connect(self.path, timeout=30)
+        try:
+            c.executescript(SCHEMA)
+            m = dict(c.execute("SELECT key, value FROM meta"))
+            if m.get("authorized") == "1" and not c.execute("SELECT 1 FROM authorizations LIMIT 1").fetchone():
+                c.execute(
+                    "INSERT INTO authorizations(action, auth_ref, recorded_by, recorded_at) VALUES ('granted', ?, ?, NULL)",
+                    (m.get("auth_ref", ""), "unknown (recorded before the audit trail)"),
+                )
+            c.commit()
+        finally:
+            c.close()
 
     # creation ---------------------------------------------------------
 
     @classmethod
-    def create(cls, name, company=None, domain=None, ip=None, auth_ref=None, authorized=False):
+    def create(cls, name, company=None, domain=None, ip=None, auth_ref=None, authorized=False,
+               authorized_by=None, require_name=False):
         name = (name or "").strip()
         if not name:
             raise ValueError("engagement name is required")
@@ -81,6 +129,9 @@ class Store:
         auth_ref = (auth_ref or "").strip() or None
         if authorized and not auth_ref:
             raise ValueError("an authorization reference is required to mark a target authorized")
+        by = clean_person(authorized_by)
+        if authorized and require_name and not by:
+            raise ValueError("the name of the person recording this authorization is required")
 
         base = slugify(name)
         slug, n = base, 2
@@ -96,10 +147,18 @@ class Store:
                 "notes": "", "created_at": now(),
             }
             c.executemany("INSERT INTO meta(key, value) VALUES (?, ?)", rows.items())
+            if authorized:
+                c.execute(
+                    "INSERT INTO authorizations(action, auth_ref, recorded_by, recorded_at) VALUES ('granted', ?, ?, ?)",
+                    (auth_ref, by or UNSPECIFIED, now()),
+                )
             c.commit()
         finally:
             c.close()
-        return cls(slug)
+        store = cls(slug)
+        if authorized:
+            audit_log(slug, "granted", auth_ref, by or UNSPECIFIED)
+        return store
 
     # plumbing ---------------------------------------------------------
 
@@ -135,19 +194,38 @@ class Store:
             "auth_ref": m.get("auth_ref") or None,
             "notes": m.get("notes", ""),
             "created_at": m.get("created_at"),
+            "last_authorization": self.authorizations(last=True),
         }
 
-    def update_meta(self, authorized=None, auth_ref=None, notes=None):
+    def update_meta(self, authorized=None, auth_ref=None, notes=None, authorized_by=None, require_name=False):
         current = self.meta()
         ref = current["auth_ref"] if auth_ref is None else (auth_ref.strip() or None)
         is_auth = current["authorized"] if authorized is None else bool(authorized)
         if is_auth and not ref:
             raise ValueError("an authorization reference is required to mark a target authorized")
+        changed = (is_auth, ref or "") != (current["authorized"], current["auth_ref"] or "")
+        by = clean_person(authorized_by)
+        if changed and require_name and not by:
+            raise ValueError("the name of the person recording this change is required")
         updates = {"authorized": "1" if is_auth else "0", "auth_ref": ref or ""}
         if notes is not None:
             updates["notes"] = notes
         with self.conn() as c:
             c.executemany("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)", updates.items())
+            if changed:
+                action = "granted" if is_auth and not current["authorized"] else "revoked" if current["authorized"] and not is_auth else "updated"
+                c.execute(
+                    "INSERT INTO authorizations(action, auth_ref, recorded_by, recorded_at) VALUES (?, ?, ?, ?)",
+                    (action, ref or "", by or UNSPECIFIED, now()),
+                )
+        if changed:
+            audit_log(self.slug, action, ref or "", by or UNSPECIFIED)
+
+    def authorizations(self, last=False):
+        """The ROE history, oldest first. Append only: nothing in the app edits or removes a row."""
+        with self.conn() as c:
+            rows = [dict(r) for r in c.execute("SELECT * FROM authorizations ORDER BY id")]
+        return (rows[-1] if rows else None) if last else rows
 
     def counts(self):
         with self.conn() as c:
@@ -245,6 +323,38 @@ class Store:
     def runs(self, limit=200):
         with self.conn() as c:
             return [dict(r) for r in c.execute("SELECT * FROM runs ORDER BY id DESC LIMIT ?", (limit,))]
+
+    # run events -------------------------------------------------------
+    # A readable trail of what each scan did, for troubleshooting. Everything is redacted on the way in.
+
+    def add_event(self, run_id, level, message):
+        level = level if level in ("debug", "info", "warning", "error") else "info"
+        with self.conn() as c:
+            c.execute(
+                "INSERT INTO run_events(run_id, at, level, message) VALUES (?, ?, ?, ?)",
+                (run_id, now(), level, redact(message)[:4000]),
+            )
+
+    def events(self, run_id=None, level=None, limit=500):
+        """The most recent events, oldest first. `level` is a floor: warning returns warnings and errors."""
+        floors = {"debug": 0, "info": 1, "warning": 2, "error": 3}
+        order = ["debug", "info", "warning", "error"]
+        wanted = order[floors.get(level or "debug", 0):]
+        sql = f"SELECT * FROM run_events WHERE level IN ({','.join('?' * len(wanted))})"
+        args = list(wanted)
+        if run_id is not None:
+            sql += " AND run_id=?"
+            args.append(run_id)
+        sql += " ORDER BY id DESC LIMIT ?"
+        args.append(max(1, min(int(limit), 5000)))
+        with self.conn() as c:
+            rows = [dict(r) for r in c.execute(sql, args)]
+        return rows[::-1]
+
+    def prune_events(self, keep=5000):
+        """Called once per run, not per insert, so a busy scan does not pay for it on every line."""
+        with self.conn() as c:
+            c.execute("DELETE FROM run_events WHERE id <= (SELECT COALESCE(MAX(id), 0) - ? FROM run_events)", (keep,))
 
     # search cache -----------------------------------------------------
 

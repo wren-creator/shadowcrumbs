@@ -1,7 +1,10 @@
 """Runs plugins against an engagement and records what happened."""
 import threading
+import time
+import traceback
 
 from . import config
+from .log import logger, redact
 from .netclient import HttpClient
 from .plugin import REGISTRY, Context
 from .search import SearchClient, make_provider
@@ -39,13 +42,31 @@ def execute(slug, tier, names=None, progress=None):
     target = {k: meta[k] for k in ("company", "domain", "ip")}
     search = SearchClient(make_provider(tier), store)
     ctx = Context(target=target, search=search, http=HttpClient(), store=store)
+    app_log = logger()
+    levels = {"debug": 10, "info": 20, "warning": 30, "error": 40}
+
+    def emitter(run_id):
+        """One function that writes to this run's events and to the app log. Plugins, the search client and the
+        HTTP client all get it, so a problem shows up in both places with the same words."""
+        def emit(msg, level="info"):
+            store.add_event(run_id, level, msg)
+            app_log.log(levels.get(level, 20), "[%s #%s] %s", slug, run_id, msg)
+        return emit
 
     summary = {"tier": tier, "plugins": [], "new_findings": 0}
+    first = True
     for i, p in enumerate(plugins):
         if progress:
             progress(current=p.name, done=i, total=len(plugins))
         run_id = store.start_run(p.name, p.tier)
-        found, status, err = 0, "ok", None
+        emit = ctx.log = search.log = ctx.http.log = emitter(run_id)
+        if first:
+            emit(f"{tier} tier started: {len(plugins)} source(s), search provider {search.provider.name}, "
+                 f"target {', '.join(f'{k}={v}' for k, v in target.items() if v)}")
+            first = False
+        emit(f"{p.name} started")
+        began = time.monotonic()
+        found, status, err, trace = 0, "ok", None, ""
         if not p.applicable(target):
             status, err = "skipped", "needs " + " or ".join(p.needs_any)
         elif p.unavailable():
@@ -57,7 +78,11 @@ def execute(slug, tier, names=None, progress=None):
                         found += 1
             except Exception as e:  # one bad source must not stop the rest
                 status, err = ("partial" if found else "error"), f"{type(e).__name__}: {e}"
+                trace = "\n" + traceback.format_exc(limit=8)
+        err = redact(err) if err else err
         store.finish_run(run_id, status, found, err)
+        emit(f"{p.name} finished: {status}, {found} new, {time.monotonic() - began:.1f}s" + (f" | {err}" if err else "") + trace,
+             "warning" if status in ("skipped", "partial") else "error" if status == "error" else "info")
         summary["plugins"].append({"name": p.name, "status": status, "found": found, "error": err})
         summary["new_findings"] += found
     if progress:
@@ -65,6 +90,9 @@ def execute(slug, tier, names=None, progress=None):
     summary["searches_live"] = search.live_queries
     summary["searches_cached"] = search.cached_queries
     summary["search_blocked"] = search.blocked
+    store.prune_events()
+    app_log.info("[%s] %s tier finished: %s new, %s live searches, %s cached%s", slug, tier, summary["new_findings"],
+                 search.live_queries, search.cached_queries, ", search engine blocked" if search.blocked else "")
     return summary
 
 
@@ -92,8 +120,9 @@ def start(slug, tier, names=None):
             with LOCK:
                 STATE[slug].update(state="idle", summary=summary, current=None)
         except Exception as e:
+            logger().exception("[%s] %s run crashed", slug, tier)
             with LOCK:
-                STATE[slug].update(state="idle", error=f"{type(e).__name__}: {e}", current=None)
+                STATE[slug].update(state="idle", error=redact(f"{type(e).__name__}: {e}"), current=None)
 
     threading.Thread(target=worker, daemon=True, name=f"run-{slug}").start()
     return status(slug)

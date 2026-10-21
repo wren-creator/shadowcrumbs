@@ -42,6 +42,8 @@ def test_validation_errors(client):
     assert client.post("/api/engagements", json={"name": "x"}).status_code == 400
     assert client.post("/api/engagements", json={"name": "x", "domain": "bad domain"}).status_code == 400
     assert client.post("/api/engagements", json={"name": "x", "domain": "a.test", "authorized": True}).status_code == 400
+    assert client.post("/api/engagements", json={"name": "x", "domain": "a.test", "authorized": True,
+                                                 "auth_ref": "SOW-1"}).status_code == 400   # no name of who recorded it
     assert client.get("/api/engagements/nope").status_code == 404
     assert client.get("/api/engagements/..%2Fetc/findings").status_code in (404, 422)
 
@@ -81,7 +83,10 @@ def test_full_flow_search_export_and_gate(client):
     assert client.post(f"/api/engagements/{slug}/runs", json={"tier": "deep"}).status_code == 403
     bad = client.patch(f"/api/engagements/{slug}", json={"authorized": True})
     assert bad.status_code == 400
-    ok = client.patch(f"/api/engagements/{slug}", json={"authorized": True, "auth_ref": "SOW 2026-114"})
+    nameless = client.patch(f"/api/engagements/{slug}", json={"authorized": True, "auth_ref": "SOW 2026-114"})
+    assert nameless.status_code == 400 and "name" in nameless.json()["detail"]
+    ok = client.patch(f"/api/engagements/{slug}", json={"authorized": True, "auth_ref": "SOW 2026-114",
+                                                        "authorized_by": "Pat Tester"})
     assert ok.status_code == 200 and ok.json()["authorized"] is True
     assert "SOW 2026-114" in client.get(f"/api/engagements/{slug}/export", params={"format": "md"}).text
 

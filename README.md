@@ -56,6 +56,8 @@ Just want to show it off? Open `docs/mockup.html` in any browser. It is the real
 
 Deep dive is locked until the engagement has an authorization reference (SOW number, ROE date, ticket, whatever you can point to later). Search tier works without one because it only reads public listings. The reference prints on every export. It's a speed bump, not a lecture: it forces the paperwork question before packets go out.
 
+**Who recorded it, and when.** Every change to the authorization (granted, updated, revoked) adds a row to that engagement's ROE history: the reference, the name of the person who recorded it, and the date and time in UTC. The dashboard asks for your name whenever you change the authorization, and remembers it in your browser. The API refuses a change without one (`authorized_by`). Rows are append only: nothing in the app edits or deletes one. Be straight about what that is worth: it is a log kept in a SQLite file on your machine, so anyone who can write to the file can change it, and it goes away with the engagement. So every change is also written to the app log, and deleting an engagement writes its whole ROE history there first. Databases made before this existed get one row marked "unknown (recorded before the audit trail)" with no time, because nobody recorded one.
+
 Sources marked **ACTIVE** in the dashboard send traffic to the client's own systems.
 
 ## Adding a data source
@@ -86,6 +88,19 @@ There is a reference list of other services worth wiring in, with where each one
 Categories are `employees`, `emails`, `documents`, `tech`, `subdomains`, `infrastructure`. A plugin that crashes gets logged in run history and the rest carry on. A plugin file that fails to load shows up in the dashboard instead of taking the app down.
 
 Tech signatures live in `shadowcrumbs/signatures.py`. Add a row for any product you want flagged. The list already leans toward IBM i, z/OS, z/TPF, RACF, and the common PLC and SCADA vendors.
+
+## Troubleshooting a scan
+
+When a source comes back empty or red, the answer is usually in the logs. There are two, and they say the same things in the same words.
+
+- **Run events**, per engagement and per run. They live in that engagement's database. Every source logs when it starts and finishes (status, new findings, seconds), every live search (provider, result count, time, the query), every cache hit, every search block, every HTTP call (method, URL, status, time), and the full traceback when a source fails. `GET /api/engagements/{slug}/events?level=warning&run_id=12` returns them. The last 5000 are kept.
+- **The app log**, `data/logs/shadowcrumbs.log`, rotated at 2 MB with 5 old files kept. It also has startup, ROE changes and crashes outside a run. Times are UTC, same as the databases.
+
+`SHADOWCRUMBS_LOG_LEVEL` sets how much the app log file keeps: `INFO` (default) is lifecycle, searches and failures, `DEBUG` adds every HTTP request and cache hit. Run events always keep everything, and you filter them when you read them (`?level=warning` and up). A 4xx or 5xx response always shows as a warning.
+
+**Keys never get logged.** One function (`shadowcrumbs/log.py`, `redact()`) scrubs both logs and the run history: secret-looking query parameters, `Authorization`, cookie and `X-...-Key` values, `Bearer` and `Basic` tokens, passwords inside URLs, and the literal value of any environment variable whose name contains KEY, TOKEN, SECRET, PASS, AUTH or CRED. Request headers and bodies are never logged at all, only the URL, status and timing. The tests plant a key in an error message and check it is nowhere in either log or the API.
+
+What the logs do contain is your targets and your search queries. That makes them as client confidential as the databases. They sit under `data/`, which is gitignored. Do not paste them into a public issue without reading them first.
 
 ## API keys and tokens
 
@@ -118,7 +133,7 @@ Heads up: HIBP and DeHashed are third parties. Running them sends the addresses 
 
 **Running your own SearXNG.** `./tools/searxng.sh up` starts one in Docker, bound to 127.0.0.1:8888 with JSON output on and a random secret generated on your machine (`tools/searxng/.secret`, gitignored). Then `export SHADOWCRUMBS_SEARXNG_URL=http://127.0.0.1:8888` before `./start.sh`. `./tools/searxng.sh down` stops it. Checked live on 2026-10-09: it returned 10 results per query for `site:`, `filetype:` and `OR` searches. Honest caveat: SearXNG relays to other engines, and from my network DuckDuckGo and Startpage showed it CAPTCHAs and Brave suspended it for too many requests, so one engine did all the answering. Check `unresponsive_engines` in its JSON output if results look thin.
 
-Other settings: `SHADOWCRUMBS_SEARCH_DELAY` (seconds between live queries, default 8), `SHADOWCRUMBS_BLOCK_MINUTES` (how long to stay quiet after DuckDuckGo blocks you, default 60), `SHADOWCRUMBS_IGNORE_BLOCK=1` (try anyway), `SHADOWCRUMBS_DATA` (where engagements live), `SHADOWCRUMBS_UA` (user agent, see the limits below), `SHADOWCRUMBS_ALLOWED_HOSTS` (extra Host names the server will answer to, for a reverse proxy).
+Other settings: `SHADOWCRUMBS_SEARCH_DELAY` (seconds between live queries, default 8), `SHADOWCRUMBS_BLOCK_MINUTES` (how long to stay quiet after DuckDuckGo blocks you, default 60), `SHADOWCRUMBS_IGNORE_BLOCK=1` (try anyway), `SHADOWCRUMBS_LOG_LEVEL` (INFO or DEBUG, see Troubleshooting a scan), `SHADOWCRUMBS_DATA` (where engagements live and logs go), `SHADOWCRUMBS_UA` (user agent, see the limits below), `SHADOWCRUMBS_ALLOWED_HOSTS` (extra Host names the server will answer to, for a reverse proxy).
 
 ## Straight talk on limits
 
@@ -138,6 +153,7 @@ run.py                       the server itself
 shadowcrumbs/
   app.py                     API and dashboard host
   engine.py                  runs plugins, tracks progress, enforces the gate
+  log.py                     app log, and the one place secrets are scrubbed from logs
   store.py                   one SQLite file per engagement
   search.py                  search providers, per-engagement query cache
   netclient.py               HTTP for deep dive plugins

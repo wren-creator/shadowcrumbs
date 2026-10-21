@@ -178,19 +178,30 @@ class SearchClient:
         self.live_queries = 0
         self.cached_queries = 0
         self.blocked = False   # one throttle ends live searching for the rest of this run
+        self.log = lambda msg, level="info": None   # the engine swaps in the run's event log
 
     def search(self, query, n=20):
         if self.store:
             cached = self.store.cache_get(query, CACHE_TTL)
             if cached is not None:
                 self.cached_queries += 1
+                self.log(f"search [{self.provider.name}] cache hit, {len(cached)} results: {query}", "debug")
                 return [Result(**r) for r in cached]
         with self._lock:
             wait = self.delay * random.uniform(0.7, 1.3) - (time.monotonic() - self._last)
             if wait > 0:
                 self._sleep(wait)
-            results = self._live(query, n)
+            began = time.monotonic()
+            try:
+                results = self._live(query, n)
+            except SearchBlocked as e:
+                self.log(f"search [{self.provider.name}] BLOCKED on: {query} | {e}", "warning")
+                raise
+            except Exception as e:
+                self.log(f"search [{self.provider.name}] failed on: {query} | {type(e).__name__}: {e}", "error")
+                raise
             self._last = time.monotonic()
+        self.log(f"search [{self.provider.name}] {len(results)} results in {time.monotonic() - began:.1f}s: {query}")
         self.live_queries += 1
         if self.store:
             self.store.cache_put(query, [asdict(r) for r in results])
