@@ -30,7 +30,7 @@ class Context:
     search: object        # SearchClient
     http: object          # HttpClient
     store: object         # Store, so plugins can read earlier findings
-    log: Callable = field(default=lambda msg: None)
+    log: Callable = field(default=lambda msg, level="info": None)   # log("what happened", level="warning")
 
 
 class Plugin:

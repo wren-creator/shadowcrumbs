@@ -22,7 +22,8 @@ Usage: ./start.sh [switches]
 
 Environment passed through if set: BRAVE_API_KEY, HIBP_API_KEY, DEHASHED_API_KEY, URLSCAN_API_KEY, GITHUB_TOKEN,
 SHADOWCRUMBS_SEARXNG_URL, SHADOWCRUMBS_PERSONAL_PLUGINS, SHADOWCRUMBS_BREACH_FILE, SHADOWCRUMBS_BLOCK_MINUTES, SHADOWCRUMBS_IGNORE_BLOCK,
-SHADOWCRUMBS_DATA, SHADOWCRUMBS_UA.
+SHADOWCRUMBS_DATA, SHADOWCRUMBS_UA, SHADOWCRUMBS_LOG_LEVEL.
+App log (UTC, keys scrubbed): data/logs/shadowcrumbs.log. Per-scan events: the engagement's /events endpoint.
 Binds to localhost only, on purpose. The data is client confidential.
 USAGE
 }
