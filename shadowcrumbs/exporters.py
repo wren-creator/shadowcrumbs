@@ -27,8 +27,12 @@ def _by_category(findings):
 
 def _scope_line(meta):
     if meta["authorized"]:
-        return f"Authorized. Reference: {meta['auth_ref']}"
-    return "No authorization reference recorded (passive search tier only)"
+        line = f"Authorized. Reference: {meta['auth_ref']}"
+    else:
+        line = "No authorization reference recorded (passive search tier only)"
+    if meta.get("scope_domains"):
+        line += ". Subdomains in scope: " + ", ".join(d["domain"] for d in meta["scope_domains"])
+    return line
 
 
 def to_json(store):

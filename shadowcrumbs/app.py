@@ -93,6 +93,12 @@ class VerifyRequest(BaseModel):
 class RunRequest(BaseModel):
     tier: Literal["search", "deep"] = "search"
     plugins: list[str] | None = None
+    domains: list[str] | None = None     # the main domain and/or subdomains in scope. None means the main domain only.
+
+
+class ScopeDomain(BaseModel):
+    domain: str
+    added_by: str | None = None
 
 
 class FindingUpdate(BaseModel):
@@ -155,6 +161,26 @@ def update_engagement(slug: str, body: ScopeUpdate):
     return _summary(slug)
 
 
+@app.post("/api/engagements/{slug}/scope-domains", status_code=201)
+def add_scope_domain(slug: str, body: ScopeDomain):
+    s = _store(slug)
+    try:
+        s.add_scope_domain(body.domain, body.added_by)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+    return _summary(slug)
+
+
+@app.delete("/api/engagements/{slug}/scope-domains/{domain}")
+def remove_scope_domain(slug: str, domain: str, removed_by: str | None = None):
+    s = _store(slug)
+    try:
+        s.remove_scope_domain(domain, removed_by)
+    except KeyError:
+        raise HTTPException(404, "that domain is not in scope") from None
+    return _summary(slug)
+
+
 @app.delete("/api/engagements/{slug}", status_code=204)
 def delete_engagement(slug: str):
     s = _store(slug)
@@ -173,7 +199,7 @@ def delete_engagement(slug: str):
 def start_run(slug: str, body: RunRequest):
     _store(slug)
     try:
-        return engine.start(slug, body.tier, body.plugins)
+        return engine.start(slug, body.tier, body.plugins, body.domains)
     except PermissionError as e:
         raise HTTPException(403, str(e)) from None
     except ValueError as e:

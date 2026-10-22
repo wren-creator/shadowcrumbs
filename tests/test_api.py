@@ -148,3 +148,30 @@ def test_same_origin_requests_pass(client):
 def test_extra_host_can_be_allowed_by_config(client, monkeypatch):
     monkeypatch.setenv("SHADOWCRUMBS_ALLOWED_HOSTS", "recon.lan")
     assert client.get("/api/engagements", headers={"Host": "recon.lan:8470"}).status_code == 200
+
+
+def test_scope_domains_only_accept_subdomains_and_need_a_name(client):
+    slug = make(client)
+    url = f"/api/engagements/{slug}/scope-domains"
+    assert client.post(url, json={"domain": "dev.acme-demo.test"}).status_code == 400          # no name
+    assert client.post(url, json={"domain": "evil.test", "added_by": "Sam"}).status_code == 400  # not under the domain
+    assert client.post(url, json={"domain": "acme-demo.test", "added_by": "Sam"}).status_code == 400
+    ok = client.post(url, json={"domain": "https://Dev.acme-demo.test/", "added_by": "Sam"})
+    assert ok.status_code == 201 and [d["domain"] for d in ok.json()["scope_domains"]] == ["dev.acme-demo.test"]
+    again = client.post(url, json={"domain": "dev.acme-demo.test", "added_by": "Sam"})
+    assert len(again.json()["scope_domains"]) == 1
+    assert "dev.acme-demo.test" in client.get(f"/api/engagements/{slug}/export", params={"format": "md"}).text
+    assert client.delete(f"{url}/dev.acme-demo.test").status_code == 200
+    assert client.delete(f"{url}/dev.acme-demo.test").status_code == 404
+
+
+def test_run_covers_scoped_subdomains_and_refuses_others(client):
+    slug = make(client)
+    client.post(f"/api/engagements/{slug}/scope-domains", json={"domain": "dev.acme-demo.test", "added_by": "Sam"})
+    run = f"/api/engagements/{slug}/runs"
+    assert client.post(run, json={"tier": "search", "plugins": ["emails_search"], "domains": ["evil.test"]}).status_code == 400
+    both = {"tier": "search", "plugins": ["emails_search"], "domains": ["acme-demo.test", "dev.acme-demo.test"]}
+    assert client.post(run, json=both).status_code == 202
+    st = wait_idle(client, slug)
+    assert st["summary"]["plugins"] and st["summary"]["plugins"][-1]["name"] == "emails_search @ dev.acme-demo.test"
+    assert [r["plugin"] for r in client.get(run).json()["runs"]] == ["emails_search @ dev.acme-demo.test", "emails_search"]

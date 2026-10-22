@@ -80,6 +80,10 @@ main { max-width: 1200px; margin: 0 auto; padding: 20px; display: grid; gap: 18p
 .badge.active { color: var(--amber); border-color: var(--amber); margin-left: 8px; }
 .scope form { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .scope input[type="text"] { flex: 1 1 260px; }
+.scope-domains { display: grid; gap: 8px; }
+.scope-domains ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.scope-domains li { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.scope-domains .val { word-break: break-all; }
 
 /* controls */
 .controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
