@@ -375,3 +375,80 @@ def test_exa_gets_a_short_pace_unless_you_set_one(monkeypatch):
     monkeypatch.setenv("SHADOWCRUMBS_SEARCH_DELAY", "5")
     c = search.SearchClient([search.Exa()], None, sleep=lambda s: None)
     assert c._delay_for(c.chain[0]) == 5                           # your setting wins
+
+
+# off target answers ---------------------------------------------------------------------------------
+
+class Fixed:
+    """A provider that always answers with the same URLs, whatever it was asked."""
+
+    def __init__(self, urls, name="searxng"):
+        self.name, self.urls, self.calls = name, urls, 0
+
+    def search(self, query, n):
+        self.calls += 1
+        return [search.Result(f"t{i}", u, "") for i, u in enumerate(self.urls)]
+
+
+@pytest.mark.parametrize("query, hosts", [
+    ("site:acme-demo.test", ["acme-demo.test"]),
+    ("site:acme-demo.test -www", ["acme-demo.test"]),
+    ("site:acme-demo.test -site:mail.acme-demo.test", ["acme-demo.test"]),   # an exclusion is not a restriction
+    ("site:a.test OR site:b.test login", ["a.test", "b.test"]),
+    ("(site:acme-demo.test filetype:pdf)", ["acme-demo.test"]),
+    ("site:https://Acme-Demo.test/path?x=1", ["acme-demo.test"]),
+    ("site:*.acme-demo.test", ["acme-demo.test"]),
+    ("site:acme-demo.test:8443", ["acme-demo.test"]),
+    ("site:.gov report", [".gov"]),
+    ('"@acme-demo.test" filetype:pdf', []),
+])
+def test_site_terms_are_read_from_a_query(query, hosts):
+    assert search.site_hosts(query) == hosts
+
+
+def test_on_site_takes_subdomains_but_not_lookalikes():
+    h = ["acme-demo.test"]
+    assert search.on_site("https://acme-demo.test/x", h) and search.on_site("https://VPN.acme-demo.test./", h)
+    assert not search.on_site("https://evilacme-demo.test/", h)         # shares the ending, is not a subdomain
+    assert not search.on_site("https://acme-demo.test.evil.example/", h)
+    assert not search.on_site("not a url", h) and not search.on_site("", h)
+    assert search.on_site("https://www.nsa.gov/x", [".gov"]) and not search.on_site("https://gov.evil.example/", [".gov"])
+
+
+def test_off_target_answers_are_dropped_and_the_engine_is_named(demo):
+    p = Fixed(["https://acme-demo.test/a", "https://today.example/junk", "https://vpn.acme-demo.test/", "https://textfree.example/"])
+    c = search.SearchClient(p, demo, delay=0, sleep=lambda s: None)
+    logged = []
+    c.log = lambda msg, level="info": logged.append((level, msg))
+    out = c.search("site:acme-demo.test filetype:pdf")
+    assert [r.url for r in out] == ["https://acme-demo.test/a", "https://vpn.acme-demo.test/"]
+    warn = [m for lvl, m in logged if lvl == "warning"]
+    assert len(warn) == 1 and "[searxng]" in warn[0] and "dropped 2 of 4" in warn[0]
+    again = search.SearchClient(Fixed([]), demo, delay=0, sleep=lambda s: None).search("site:acme-demo.test filetype:pdf")
+    assert [r.url for r in again] == [r.url for r in out]               # the cache holds the cleaned answer, not the junk
+
+
+def test_an_answer_with_nothing_on_the_site_is_not_cached(demo):
+    """The engine ignored the operator. That says nothing about the client, so a later run must ask again."""
+    junk = Fixed(["https://today.example/junk", "https://textfree.example/"])
+    assert search.SearchClient(junk, demo, delay=0, sleep=lambda s: None).search("site:acme-demo.test") == []
+    good = Fixed(["https://acme-demo.test/real"])
+    out = search.SearchClient(good, demo, delay=0, sleep=lambda s: None).search("site:acme-demo.test")
+    assert good.calls == 1 and [r.url for r in out] == ["https://acme-demo.test/real"]
+
+
+def test_a_truly_empty_answer_is_still_cached(demo):
+    empty = Fixed([])
+    search.SearchClient(empty, demo, delay=0, sleep=lambda s: None).search("site:acme-demo.test")
+    later = Fixed(["https://acme-demo.test/x"])
+    assert search.SearchClient(later, demo, delay=0, sleep=lambda s: None).search("site:acme-demo.test") == []
+    assert later.calls == 0                                             # nothing came back, nothing was dropped, so it counts
+
+
+def test_queries_without_a_site_term_and_demo_data_are_left_alone(demo):
+    urls = ["https://one.example/", "https://two.example/"]
+    plain = search.SearchClient(Fixed(urls), demo, delay=0, sleep=lambda s: None)
+    assert len(plain.search('"@acme-demo.test" filetype:pdf')) == 2
+    assert len(plain.search("login -site:one.example")) == 2     # only an exclusion
+    canned = search.SearchClient(Fixed(urls, name="fixture"), None, delay=0, sleep=lambda s: None)
+    assert len(canned.search("site:acme-demo.test")) == 2               # canned demo results are not an engine's answer

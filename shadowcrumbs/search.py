@@ -245,6 +245,33 @@ def make_chain(tier):
     return [make_provider(tier, name) for name in config.search_chain(tier)]
 
 
+SITE_TERM = re.compile(r"""(?:^|[\s(])(-?)site:["']?([^\s)"']+)""", re.I)
+
+
+def site_hosts(query):
+    """The hosts a query restricts itself to with positive site: terms, lowercase. A -site: exclusion is not a
+    restriction and is ignored. A leading dot (site:.gov) keeps its dot and means any host ending that way."""
+    out = []
+    for neg, raw in SITE_TERM.findall(query):
+        if neg:
+            continue
+        h = re.sub(r"^[a-z][a-z0-9+.-]*://", "", raw.lower())   # a pasted scheme
+        h = re.split(r"[/?#]", h, maxsplit=1)[0]                # a path scoped term still restricts the host
+        h = re.sub(r":\d+$", "", h)                             # a port
+        h = h[2:] if h.startswith("*.") else h                  # site:*.acme.test is the same as site:acme.test
+        if h.strip("."):
+            out.append(h)
+    return out
+
+
+def on_site(url, hosts):
+    """True when the URL's host is one of `hosts` or a subdomain of one."""
+    host = (urlparse(url).hostname or "").lower().rstrip(".")
+    if not host:
+        return False
+    return any(host.endswith(h) if h.startswith(".") else host == h or host.endswith("." + h) for h in hosts)
+
+
 BRAVE_PACE = 1.2   # seconds. Brave's plans allow about a query a second, and an API has no CAPTCHA to be polite about
 EXA_PACE = 0.5     # seconds. Exa allows 10 queries a second by default; this stays well under it
 
@@ -289,11 +316,28 @@ class SearchClient:
                 self.log(f"search [{self.provider.name}] failed on: {query} | {type(e).__name__}: {e}", "error")
                 raise
             self._last = time.monotonic()
+        results, dropped = self._keep_on_site(query, results)
         self.log(f"search [{self.provider.name}] {len(results)} results in {time.monotonic() - began:.1f}s: {query}")
         self.live_queries += 1
-        if self.store:
+        # An engine that answered only with pages off the site did not honour the operator, which says nothing about
+        # the site. Caching that empty answer would hide a real footprint for a week, so the next run asks again.
+        if self.store and not (dropped and not results):
             self.store.cache_put(query, [asdict(r) for r in results])
         return results
+
+    def _keep_on_site(self, query, results):
+        """Some engines drop a site: restriction and answer with unrelated pages (Bing through SearXNG, Exa when
+        nothing matches). Taking those as hits would invent a footprint for the client, so they are dropped here,
+        whichever engine answered. Returns (kept, how many were dropped)."""
+        hosts = [] if self.provider.name == "fixture" else site_hosts(query)   # canned data is not a search engine
+        if not hosts:
+            return results, 0
+        kept = [r for r in results if on_site(r.url, hosts)]
+        dropped = len(results) - len(kept)
+        if dropped:
+            self.log(f"search [{self.provider.name}] ignored the site: restriction, dropped {dropped} of {len(results)} "
+                     f"results that were not on {', '.join(hosts)}: {query}", "warning")
+        return kept, dropped
 
     def _active(self):
         return next((p for p in self.chain if p.name not in self._down), self.chain[-1])
