@@ -7,7 +7,7 @@ In order. Items marked **needs a key** can wait until there is one, so skip down
 - [ ] Re-measure DuckDuckGo from a different network (2026-10-09: from this IP one query works and the next, a minute or two later, is blocked, same pattern as before. A browser on the same network gets results from html.duckduckgo.com, so the IP is not banned and the script is what gets flagged). One check query, then `tools/measure_ddg.py --paces 10,5,2.5 --per-pace 20`. If a fresh IP takes the slow paces, the 8 second default is right. If not, make a Brave key the recommended route
 - [ ] hunter.io plugin: emails and the address pattern for the domain (**needs a key**, small free tier)
 - [ ] Shared helper for the internet scanners, then short plugins on top: Shodan, Censys, Netlas, ONYPHE, BinaryEdge, ZoomEye, FOFA, FullHunt, LeakIX (**each needs a key**)
-- [ ] Live-verify the HIBP and DeHashed plugins, they were built from the vendors' docs and fake responses (**needs keys**). The new Verify page exercises the HIBP key check, so run it with a key and report what it says
+- [ ] Live-verify the HIBP and DeHashed plugins, they were built from the vendors' docs and fake responses (**needs keys**; DeHashed key and 500 credits confirmed live on 2026-10-22, one real domain search still to run). The new Verify page exercises the HIBP key check, so run it with a key and report what it says
 - [ ] Decide whether to keep the Firefox-style default user agent, the README discloses it
 
 ## Backlog
@@ -48,7 +48,7 @@ The full list of candidate sources, and where each one fits, is in [docs/DATA-SO
 - [x] Scan logs (2026-10-21): per-run events in each engagement database plus a rotating app log, one redaction function in front of both, viewable on the admin page
 - [x] Plugin templates and `tools/new_plugin.py` (2026-10-21): search and deep starters, name and path checks, never overwrites, tested by scaffolding and running one against the demo data
 - [x] Sources page (2026-10-21): the team adds search data points from the dashboard with no code, hot reloaded, shareable by export or one shared file, with a revision lock. Data only, so it cannot run code or reach a client
-- [x] Verify step (2026-10-21): checks each source's endpoint and key plus the search engines, on the admin page and with `tools/verify_sources.py`. Asks about example.com only, never queries DuckDuckGo live, keys scrubbed. Public services checked live; HIBP and DeHashed still need a real key
+- [x] Verify step (2026-10-21): checks each source's endpoint and key plus the search engines, on the admin page and with `tools/verify_sources.py`. Asks about example.com only, never queries DuckDuckGo live, keys scrubbed. Public services checked live; DeHashed's key is checked free through its account info endpoint (2026-10-22), HIBP still needs a real key
 - [x] SearXNG suspended-engine handling (2026-10-21, idea from Kev Milne's EZRecon): an empty answer caused by throttled upstream engines retries once, then raises a block naming the engines, so it is never cached as "no footprint" for a week
 - [x] `.env` loading and a search fallback chain (2026-10-21): Brave, then SearXNG, then DuckDuckGo, moving on when one is throttled. Brave runs at a query a second. First live run 2026-10-22: 34 searches through Brave in 61 seconds, no block, on a small domain with little exposed, so the query hit rate is still unmeasured
 - [x] Custom search queries (2026-10-21): `exposure_search` plugin plus a seven-query importable pack in `source_packs/`. Hit rate on a real domain not measured yet

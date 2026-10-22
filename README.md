@@ -183,7 +183,7 @@ It exits 1 when a check fails, so it also works as a preflight before an engagem
 | **FAILED** | Unreachable, or the key was rejected. The detail says which |
 | **WARNING** | It works, but look: crt.sh is overloaded, a SearXNG engine is down, or your GitHub token can see private repos |
 | **NOT SET UP** | A key or file the source needs is not configured, with the variable to set. Not a failure |
-| **NOT CHECKED** | There is no safe check. DeHashed (the only test of a key is a billable search) and the sources that only talk to the client's own systems |
+| **NOT CHECKED** | There is no safe check, which is the sources that only talk to the client's own systems |
 
 What it sends, so there are no surprises. Every request asks a service about `example.com`, never your client, and keys travel in request headers only, as in a real run. The search engine for each tier is checked too. DuckDuckGo is **never** queried live, because a test query is exactly what trips its throttle: you get the recorded block state instead. A Brave check uses one search from your quota, and the page says so. SearXNG gets one query through your own instance and reports any upstream engines that are not answering. The GitHub check uses the free rate limit call, so it costs nothing, and it warns if the token has the `repo` scope.
 

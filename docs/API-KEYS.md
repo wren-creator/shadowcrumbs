@@ -43,7 +43,7 @@ Cost: paid subscription. Deep dive only.
 ### DeHashed (`DEHASHED_API_KEY`)
 Why: a second breach source for the client's domain. It never stores passwords.
 Get it: sign in at https://app.dehashed.com/ and look for the API key in your account settings. DeHashed blocks scripted checks, so I could not confirm the exact page. If it moved, their site search will find "API".
-Cost: paid, and each search uses a credit. For that reason the Verify step does **not** test this key (it only validates on a billable search), and it is the one source worth running on purpose.
+Cost: paid, and each search uses a credit. You need **two** things: a search subscription (the gate) and search credits. Credits alone get a 401 with "You need a search subscription and API credits". The Verify step calls the free account info endpoint, so it reports a bad key, a missing subscription or an empty balance without spending a credit.
 
 ## Putting them in
 

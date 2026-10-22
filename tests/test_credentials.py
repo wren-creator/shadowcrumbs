@@ -170,6 +170,13 @@ def test_dehashed_pages_until_a_short_page(store, monkeypatch):
     assert len(run("dehashed_domain", store, again)) == 4 and again.posts == []   # all pages cached
 
 
+def test_dehashed_error_passes_on_the_reason_from_the_body(store, monkeypatch):
+    monkeypatch.setenv("DEHASHED_API_KEY", "k")
+    body = {"error": "You need a search subscription and API credits to use the API"}
+    with pytest.raises(RuntimeError, match="search subscription"):
+        run("dehashed_domain", store, FakeHttp(post=[Resp(401, body)]))
+
+
 @pytest.mark.parametrize("status,match", [(401, "DEHASHED_API_KEY"), (403, "DEHASHED_API_KEY"), (429, "rate limit")])
 def test_dehashed_errors_are_clear(store, monkeypatch, status, match):
     monkeypatch.setenv("DEHASHED_API_KEY", "k")
