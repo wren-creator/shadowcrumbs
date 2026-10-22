@@ -93,6 +93,30 @@ def test_rdap_domain_and_cidr(store):
             "Netblock 203.0.113.0 to 203.0.113.255"} <= out
 
 
+def test_rdap_walks_up_from_a_subdomain_to_the_registered_domain():
+    import requests
+    store = Store.create("Sub", company="Acme Demo Corp", domain="scan.corp.acme-demo.test")
+
+    bad = requests.Response()
+    bad.status_code = 400
+
+    class Http(FakeHttp):
+        def get_json(self, url, timeout=None):
+            self.seen = getattr(self, "seen", []) + [url]
+            if url.endswith("/scan.corp.acme-demo.test"):
+                raise requests.HTTPError("400", response=bad)
+            if url.endswith("/corp.acme-demo.test"):
+                return None
+            if url.endswith("/acme-demo.test"):
+                return {"nameservers": [{"ldhName": "NS1.ACME-DEMO.TEST"}]}
+            return None
+
+    http = Http()
+    out = {f.value for f in run("rdap", store, http)}
+    assert "NS ns1.acme-demo.test" in out
+    assert [u.rsplit("/", 1)[1] for u in http.seen[:3]] == ["scan.corp.acme-demo.test", "corp.acme-demo.test", "acme-demo.test"]
+
+
 def test_crtsh_dedupes_and_stays_in_scope(store):
     http = FakeHttp({"https://crt.sh/": [
         {"name_value": "*.acme-demo.test\nvpn.acme-demo.test", "issuer_name": "Let's Encrypt"},
