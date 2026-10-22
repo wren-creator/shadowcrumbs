@@ -115,7 +115,27 @@ class SearXNG:
         if not self.base:
             raise RuntimeError("SHADOWCRUMBS_SEARXNG_URL is not set")
 
+    retry_pause = 2.5   # seconds; upstream suspensions are short cool-offs
+
     def search(self, query, n):
+        for attempt in (0, 1):
+            data = self._fetch(query)
+            rows = data.get("results", [])
+            if rows:
+                return [Result(x.get("title", ""), x.get("url", ""), x.get("content", "")) for x in rows[:n]]
+            suspended = self._suspended(data)
+            if not suspended:
+                return []   # nothing indexed for this query, a real empty answer
+            if attempt == 0:
+                time.sleep(self.retry_pause)
+        # Empty because the upstream engines are cooling off. Raising keeps it out of the cache, where a
+        # fake "no footprint" answer would stick for a week.
+        raise SearchBlocked(
+            "SearXNG's upstream engines are rate limited (" + ", ".join(suspended) + "). "
+            "Slow the run down with SHADOWCRUMBS_SEARCH_DELAY, or try again in a few minutes."
+        )
+
+    def _fetch(self, query):
         r = requests.get(
             f"{self.base}/search",
             params={"q": query, "format": "json"},
@@ -129,8 +149,18 @@ class SearXNG:
                 "SearXNG refused the request. Add json under search.formats in its settings.yml."
             )
         r.raise_for_status()
-        rows = r.json().get("results", [])
-        return [Result(x.get("title", ""), x.get("url", ""), x.get("content", "")) for x in rows[:n]]
+        return r.json()
+
+    @staticmethod
+    def _suspended(data):
+        """Engines SearXNG reports as unresponsive, as 'name: reason'. Entries look like ['brave', 'Suspended: too many requests']."""
+        out = []
+        for e in data.get("unresponsive_engines") or []:
+            if isinstance(e, (list, tuple)) and e:
+                out.append(f"{e[0]}: {e[1]}" if len(e) > 1 and e[1] else str(e[0]))
+            elif e:
+                out.append(str(e))
+        return out
 
 
 class FixtureProvider:
