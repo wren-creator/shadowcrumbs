@@ -65,9 +65,22 @@ Just want to show it off? Open `docs/mockup.html` in any browser. It is the real
 2. **Search tier.** Runs on search engine results only. Nothing touches the client. Every query is cached per engagement, so re-runs are free and quiet.
    - `exposure_search` adds queries for sensitive looking documents (marked confidential, architecture and runbook files, people lists), public cloud storage that mentions the client, and email addresses seen on paste and code sites. It sticks to operators every search engine handles. For pastes it keeps only the address and the site it was seen on, never the text around it.
    - `source_packs/exposure_extras.json` holds seven more queries that lean on `intitle:` and `inurl:`, which DuckDuckGo and some SearXNG engines handle unevenly (dev and staging hosts, API docs, open directories, remote access pages, admin tools, default server pages, team pages). Import it on the Sources page when you want them. Expect thinner results until you have a Brave key.
-3. **Deep dive.** Direct lookups and live requests: DNS, RDAP, certificate transparency, public urlscan.io scans, GitHub code search, subdomain resolution with dangling CNAME checks, an HTTP probe, and metadata from the documents you found. Flip the toggle when search has given you what it can.
+3. **Deep dive.** Direct lookups and live requests: DNS, RDAP, certificate transparency, public urlscan.io scans, GitHub code search, subdomain resolution with dangling CNAME checks, an HTTP probe, metadata from the documents you found, and what is written inside them (see **Reading inside files** below). Flip the toggle when search has given you what it can.
 4. **Triage.** Mark findings verified, drop the junk, filter the list.
 5. **Export.** Markdown, PDF, or JSON, with scope and run history baked in.
+
+## Reading inside files
+
+The `doc_content` source (deep dive, ACTIVE) downloads the readable files found on the client's domain and looks inside. It reads PDF, DOCX, XLSX, PPTX and text or config files (txt, md, xml, csv, json, log, yml, ini, conf, env, sql, bak, properties). The search tier now looks for the text and config types too, so they land in Exposed Documents for it to pick up. Run `documents_search` first, then `doc_content`.
+
+What it keeps:
+- **Email addresses** at the client's domain, under Emails and Credentials.
+- **Names** from structured spots only: `Author:` and `Contact:` style lines, `Name <address>` headers, and the line under a sign-off. It does not guess at names in running text, because that mostly finds product names.
+- **Secrets**: private key blocks, AWS, GitHub, Slack, Google and Stripe keys, JWTs, passwords inside URLs and XML tags, and `password=`, `secret:`, `api_key=` style lines. Placeholders (`changeme`, `<password>`, `****`) and prose ("password must be 8 characters") are skipped.
+
+**Secrets are masked on purpose.** The database, the dashboard, the logs and every export hold the kind, the first and last two characters, the length, the file and the line number. The full value is never written down. Open the evidence link to see the real thing. Live credentials sitting in a laptop database or a draft report are a worse problem than the one you set out to find. Tell the client about a hit straight away rather than waiting for the report.
+
+Safety, since these files are hostile input: 10 MB per file and 25 files per run, Office archives are refused when they expand past 25 MB or compress suspiciously well, PDFs stop at 50 pages, encrypted PDFs are skipped, binary files are skipped, XML goes through defusedxml, and the text only ever reaches the dashboard as text. `sitemap.xml` and `robots.txt` are skipped, they are public by design. Old binary `.doc`, `.xls` and `.ppt` files are not read. The files are downloaded a second time (after `doc_metadata`), so it is another round of requests to the client.
 
 ## The scope gate
 

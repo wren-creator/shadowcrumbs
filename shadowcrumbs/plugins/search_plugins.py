@@ -2,16 +2,20 @@
 import re
 from urllib.parse import urlparse
 
+from ..content import SKIPPED_NAMES
 from ..plugin import Finding, Plugin, register
 from ..signatures import scan
 from ..util import EMAIL_RE, clip, email_format, guess_company, hostname, in_domain, placeholder_email, window
 
-DOC_EXTS = ("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "csv", "txt", "rtf", "odt", "ods")
+DOC_EXTS = ("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "csv", "txt", "rtf", "odt", "ods",
+            "md", "xml", "json", "log", "yml", "yaml", "ini", "conf", "cfg", "env", "sql", "bak", "properties")
 
 
 def doc_ext(url):
     path = urlparse(url).path.lower()
     ext = path.rsplit(".", 1)[-1] if "." in path else ""
+    if path.rsplit("/", 1)[-1].startswith(SKIPPED_NAMES):     # sitemap.xml and friends are public by design
+        return None
     return ext if ext in DOC_EXTS else None
 
 
@@ -50,7 +54,7 @@ class SubdomainsSearch(Plugin):
 class DocumentsSearch(Plugin):
     name = "documents_search"
     tier = "search"
-    description = "Finds exposed PDFs, Office files and white papers on the domain and under the company name."
+    description = "Finds exposed PDFs, Office files, text and config files, and white papers on the domain and under the company name."
     categories = ("documents",)
     needs_any = ("domain", "company")
     order = 20
@@ -60,6 +64,8 @@ class DocumentsSearch(Plugin):
         queries = []
         if d:
             queries += [f"site:{d} filetype:{e}" for e in ("pdf", "docx", "xlsx", "pptx", "doc", "xls")]
+            queries += [f"site:{d} filetype:txt", f"site:{d} filetype:xml",
+                        f"site:{d} filetype:log OR filetype:conf OR filetype:ini OR filetype:yml OR filetype:sql"]
         if company:
             queries += [
                 f'"{company}" whitepaper OR "white paper" OR "case study" filetype:pdf',
