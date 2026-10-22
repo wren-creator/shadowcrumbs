@@ -63,3 +63,25 @@ def test_the_real_env_file_can_never_be_committed():
     assert git("check-ignore", "-q", "env.example").returncode == 1, "the example file has to stay committable"
     tracked = git("ls-files").stdout.split()
     assert not [f for f in tracked if f.rsplit("/", 1)[-1].startswith(".env")], "a .env file is tracked"
+
+
+def test_no_tracked_file_holds_something_shaped_like_a_real_key():
+    """A backstop for the day someone pastes a key into a doc or a test. Patterns are for GitHub and Brave keys."""
+    import re
+    import subprocess
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    listed = subprocess.run(["git", "-C", str(root), "ls-files"], capture_output=True, text=True)
+    if listed.returncode != 0:
+        pytest.skip("not a git checkout")
+    shapes = re.compile(r"github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{30,}|\bBSA[A-Za-z0-9_-]{20,}")
+    hits = []
+    for rel in listed.stdout.split("\n"):
+        f = root / rel
+        if rel and f.is_file() and f.stat().st_size < 2_000_000:
+            try:
+                if shapes.search(f.read_text(encoding="utf-8")):
+                    hits.append(rel)
+            except UnicodeDecodeError:
+                pass
+    assert not hits, f"looks like a real key in: {hits}"
