@@ -27,6 +27,8 @@ All the tests should pass before you start (the browser test skips itself if the
 
 ## Adding a data source
 
+Not a developer, or the source is just a few searches? Use the **SOURCES** page in the dashboard instead, no code needed (see the README). The rest of this section is for sources that need code.
+
 This is the contribution I'd love most, and it needs no changes to the core. The quickest start is `python tools/new_plugin.py my_source --tier search --category tech --query 'site:{d} something'`, which writes a working file from the template (see the README). A source is one Python class:
 
 ```python

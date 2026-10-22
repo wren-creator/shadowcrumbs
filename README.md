@@ -70,7 +70,32 @@ There is no login, same as the rest of the tool: it is one operator on one machi
 
 Sources marked **ACTIVE** in the dashboard send traffic to the client's own systems.
 
-## Adding a data source
+## Adding a data point from the dashboard (no code)
+
+Click **SOURCES** in the header (or open `/sources.html`). This is the page for the whole team: nobody has to write Python to add a search.
+
+A source is a few searches plus a rule for what to keep:
+
+1. **Name** it and say what it finds.
+2. Pick the **tab** the findings land in (Tech Stack, Subdomains, and so on).
+3. Say what it **needs** from the target: the domain, the company name, or both. A target without them is skipped, with the reason in the run history.
+4. Type the **searches**, one per line. Click `{domain}` or `{company}` to drop in the target's values. Search operators work: `site:`, `filetype:`, `"exact phrase"`, `OR`. The page tells you how many searches that is and how long a run takes at the current pace.
+5. Optionally **keep only** results that mention certain words, or that sit on the target's own domain.
+6. Choose how each result is **recorded**: its page title, its hostname, the email addresses in it, or a document link (PDF, Office files).
+7. Put in your **name**. It is saved with the source and shown to the team.
+
+**Show the searches** previews the exact queries for one of your engagements, with no network and nothing saved, before you commit. **Save** and the source is live straight away: it shows up in the dashboard's search sources with a CUSTOM badge, ready to run. Edit and Delete are on the same page.
+
+What it will not do, on purpose. A source made here is data, never code. It cannot run anything, fetch a URL, call an API or touch the client, and there is no regular expression box. That is what makes it safe to hand to a whole team. Searches go to your search engine, so keep client secrets and internal code names out of them. If you need a source that calls an API or the client's own site, that is a plugin file (next section). Limits: 10 searches per source, 100 sources.
+
+**Sharing with the team.** The list is one JSON file, `data/custom_sources.json`. Two ways to share:
+
+- **Export all / Import** on the page. A teammate exports, you import. If a name already exists you choose to skip it, overwrite it, or keep both.
+- **One shared file.** Set `SHADOWCRUMBS_SOURCES_FILE` to a file in a shared folder or a git checkout and everyone uses the same list. Each save bumps a revision number. If two people save at once the second gets "Someone else changed the sources, reload" instead of silently wiping the first. Last write does not win quietly.
+
+A damaged shared file never takes the app down and is never overwritten: the page shows what it could not read, and a single bad entry is skipped and kept while the rest load. Every create, edit, delete and import is written to the app log with the person's name.
+
+## Adding a data source in code
 
 **Start from the template.** One command makes a working file with your name, category and queries filled in:
 
@@ -175,6 +200,7 @@ shadowcrumbs/
   app.py                     API and dashboard host
   engine.py                  runs plugins, tracks progress, enforces the gate
   log.py                     app log, and the one place secrets are scrubbed from logs
+  custom_sources.py          sources added from the dashboard (data, never code)
   store.py                   one SQLite file per engagement
   search.py                  search providers, per-engagement query cache
   netclient.py               HTTP for deep dive plugins
@@ -184,7 +210,7 @@ shadowcrumbs/
   plugins/deep_plugins.py    deep dive sources
 plugins_user/                your own sources, plus the two templates (files starting with _ are never loaded)
 tools/new_plugin.py          makes a new source from the template
-static/                      the dashboard (index.html) and the admin page (admin.html)
+static/                      the dashboard (index.html), the sources page (sources.html), the admin page (admin.html)
 fixtures/demo.json           offline demo data
 tests/                       pytest suite
 ```
