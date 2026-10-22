@@ -184,3 +184,39 @@ def test_searxng_url_wins_when_set(monkeypatch):
     assert search.make_provider("search").name == "ddg"
     with pytest.raises(RuntimeError, match="SEARXNG_URL"):
         search.SearXNG()
+
+
+class JsonResp(Resp):
+    def __init__(self, data, status=200):
+        super().__init__("", status)
+        self._data = data
+
+    def json(self):
+        return self._data
+
+
+def test_searxng_retries_once_when_engines_are_suspended_then_refuses_to_pass_off_empty(monkeypatch):
+    monkeypatch.setattr(search.time, "sleep", lambda s: None)
+    suspended = {"results": [], "unresponsive_engines": [["brave", "Suspended: too many requests"], ["duckduckgo", "CAPTCHA"]]}
+    calls = []
+
+    def fake_get(url, **k):
+        calls.append(1)
+        return JsonResp(suspended)
+
+    monkeypatch.setattr(search.requests, "get", fake_get)
+    with pytest.raises(search.SearchBlocked, match="brave: Suspended.*duckduckgo: CAPTCHA"):
+        search.SearXNG("http://x").search("q", 5)
+    assert len(calls) == 2                                   # one retry, no more
+
+
+def test_searxng_retry_can_succeed_and_a_true_empty_is_not_retried(monkeypatch):
+    monkeypatch.setattr(search.time, "sleep", lambda s: None)
+    replies = [{"results": [], "unresponsive_engines": [["brave", "Suspended"]]},
+               {"results": [{"title": "T", "url": "https://a.test", "content": "c"}]}]
+    monkeypatch.setattr(search.requests, "get", lambda *a, **k: JsonResp(replies.pop(0)))
+    assert [r.url for r in search.SearXNG("http://x").search("q", 5)] == ["https://a.test"]
+
+    calls = []
+    monkeypatch.setattr(search.requests, "get", lambda *a, **k: calls.append(1) or JsonResp({"results": []}))
+    assert search.SearXNG("http://x").search("q", 5) == [] and len(calls) == 1
