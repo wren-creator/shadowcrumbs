@@ -24,6 +24,17 @@ Licensed GPL-3.0, see [LICENSE](LICENSE). No warranty, as the licence says.
 ./stop.sh               # stop it
 ```
 
+To run the whole stack with your own SearXNG in one go (needs Docker running), use the front door:
+
+```bash
+./shadowcrumbs.sh start --searxng     # SearXNG up, wait until it answers, then the dashboard pointed at it
+./shadowcrumbs.sh status              # dashboard, SearXNG, and whether DuckDuckGo has blocked this machine
+./shadowcrumbs.sh stop                # dashboard, and SearXNG if this script started it
+./shadowcrumbs.sh restart --searxng
+```
+
+`start` also takes `--demo`, `--port N`, `--delay SECS` and `--foreground`. A SearXNG that was already running, or one you pointed at with `SHADOWCRUMBS_SEARXNG_URL`, is used but never stopped for you. `start.sh`, `stop.sh` and `tools/searxng.sh` still work on their own.
+
 Switches for `start.sh`: `--demo`, `--port N`, `--delay SECS` (pause between live search queries), `--foreground` (stay in the terminal, Ctrl-C to stop), `--status`, `--help`. It builds `.venv` on first run if one isn't there. Logs go to `shadowcrumbs.log`.
 
 Click the **SHADOWCRUMBS** logo in the header to flip between the green screen and a rose theme. It remembers your pick.
