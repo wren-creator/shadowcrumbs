@@ -21,7 +21,8 @@ Minimum for a reliable first scan: Brave plus the GitHub token.
 ### Brave Search API (`BRAVE_API_KEY`)
 Why: a real search API. No CAPTCHAs, no throttling by IP. When it is set, Brave leads the search chain on both tiers, at about a query a second.
 Get it: https://brave.com/search/api/ (sign up, pick a plan, create a key in the dashboard).
-Cost: it is a paid service with a plan page. Read it before you enter a card, plans have changed over time. A full scan is roughly 40 queries, and results are cached per engagement for a week, so a re-run costs nothing.
+Cost: it is a paid service, and plans change, so read the plan page before you enter a card. As of 2026-10-22 one plan listed $5 per 1,000 requests (half a cent a query), $5 of free credit every month, and 50 requests per second. A full scan is roughly 36 to 40 queries, so about 20 cents, and results are cached per engagement for a week, so a re-run costs nothing. The verify check prints requests left per second and per month, and a monthly 0 there means the plan has no monthly cap, not that you are out.
+Pace: Brave queries go out about a second apart by default, which is safe on slower plans. On a 50 per second plan you can speed a scan up with `SHADOWCRUMBS_SEARCH_DELAY=0.2` in `.env`. Too fast on a slow plan gets a 429, and the scan moves on to the next search engine.
 
 ### GitHub token (`GITHUB_TOKEN`)
 Why: GitHub code search finds public repos, hostnames and addresses that mention the domain. It only returns metadata, no code is kept, and private repos are dropped.
