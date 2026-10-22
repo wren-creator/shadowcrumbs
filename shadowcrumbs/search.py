@@ -34,6 +34,10 @@ class SearchBlocked(Exception):
     """The search engine is rate limiting or challenging us."""
 
 
+class SearchQuiet(SearchBlocked):
+    """We chose not to ask: this engine blocked us recently and we are waiting it out."""
+
+
 class DuckDuckGoHTML:
     name = "ddg"
 
@@ -97,6 +101,9 @@ class Brave:
         )
         if r.status_code == 429:
             raise SearchBlocked("Brave Search API rate limit hit")
+        if r.status_code in (401, 402, 403, 422):
+            # a bad key or a used up plan fails every query, so treat it as a block and let the next engine take over
+            raise SearchBlocked(f"Brave refused the request ({r.status_code}). Check BRAVE_API_KEY and your plan.")
         r.raise_for_status()
         rows = r.json().get("web", {}).get("results", [])
         return [
@@ -180,8 +187,8 @@ class FixtureProvider:
         return out[:n]
 
 
-def make_provider(tier):
-    name = config.search_provider(tier)
+def make_provider(tier, name=None):
+    name = name or config.search_provider(tier)
     if name == "ddg":
         return DuckDuckGoHTML()
     if name == "brave":
@@ -196,9 +203,22 @@ def make_provider(tier):
     raise ValueError(f"unknown search provider {name!r}")
 
 
+def make_chain(tier):
+    """Every engine this tier may use, best first. See config.search_chain."""
+    return [make_provider(tier, name) for name in config.search_chain(tier)]
+
+
+BRAVE_PACE = 1.2   # seconds. Brave's plans allow about a query a second, and an API has no CAPTCHA to be polite about
+
+
 class SearchClient:
     def __init__(self, provider, store=None, delay=None, sleep=time.sleep):
-        self.provider = provider
+        """`provider` is one engine or a list of them, best first."""
+        self.chain = list(provider) if isinstance(provider, (list, tuple)) else [provider]
+        self.provider = self.chain[0]   # the one tried last, for logs
+        self._down = set()              # engines that blocked us during this run
+        self._explicit_delay = delay is not None or "SHADOWCRUMBS_SEARCH_DELAY" in os.environ
+        provider = self.provider
         self.store = store
         # canned fixture data is not a search engine, so there is nothing to be polite to
         self.delay = (0.0 if provider.name == "fixture" else config.search_delay()) if delay is None else delay
@@ -218,7 +238,7 @@ class SearchClient:
                 self.log(f"search [{self.provider.name}] cache hit, {len(cached)} results: {query}", "debug")
                 return [Result(**r) for r in cached]
         with self._lock:
-            wait = self.delay * random.uniform(0.7, 1.3) - (time.monotonic() - self._last)
+            wait = self._delay_for(self._active()) * random.uniform(0.7, 1.3) - (time.monotonic() - self._last)
             if wait > 0:
                 self._sleep(wait)
             began = time.monotonic()
@@ -237,28 +257,50 @@ class SearchClient:
             self.store.cache_put(query, [asdict(r) for r in results])
         return results
 
-    def _live(self, query, n):
-        """One live query. A throttle ends live searching for this run and is remembered across runs.
+    def _active(self):
+        return next((p for p in self.chain if p.name not in self._down), self.chain[-1])
 
-        Retrying does not help: DuckDuckGo blocks run an hour or more, and every request sent while blocked
-        may extend it. So the first block stops everything, and the next run stays quiet until the cooldown passes.
+    def _delay_for(self, provider):
+        """Brave is an API, so it gets a short pace unless you set one yourself. Everything else uses the long one."""
+        if provider.name == "brave" and not self._explicit_delay:
+            return BRAVE_PACE
+        return self.delay
+
+    def _live(self, query, n):
+        """One live query. A throttle moves on to the next engine in the chain. When every engine has blocked
+        us, live searching ends for this run.
+
+        Retrying the same engine does not help: DuckDuckGo blocks run an hour or more, and every request sent while
+        blocked may extend it. A DuckDuckGo block is remembered across runs, so the next run stays quiet until the
+        cooldown passes.
         """
         if self.blocked:
             raise SearchBlocked("Search engine is throttling this IP, skipping the rest of this run.")
-        if self.provider.name == "ddg":
-            self._respect_earlier_block()
-        try:
-            results = self.provider.search(query, n)
-        except SearchBlocked:
-            self.blocked = True
-            if self.provider.name == "ddg":
-                marker = config.block_marker()
-                marker.parent.mkdir(parents=True, exist_ok=True)
-                marker.write_text(json.dumps({"at": time.time()}))
-            raise
-        if self.provider.name == "ddg":
-            config.block_marker().unlink(missing_ok=True)
-        return results
+        last = None
+        for i, prov in enumerate(self.chain):
+            if prov.name in self._down:
+                continue
+            self.provider = prov
+            try:
+                if prov.name == "ddg":
+                    self._respect_earlier_block()
+                results = prov.search(query, n)
+            except SearchBlocked as e:
+                self._down.add(prov.name)
+                last = e
+                if prov.name == "ddg" and not isinstance(e, SearchQuiet):
+                    marker = config.block_marker()
+                    marker.parent.mkdir(parents=True, exist_ok=True)
+                    marker.write_text(json.dumps({"at": time.time()}))
+                nxt = [p.name for p in self.chain[i + 1:] if p.name not in self._down]
+                if nxt:
+                    self.log(f"search [{prov.name}] BLOCKED, moving on to {nxt[0]}: {e}", "warning")
+                continue
+            if prov.name == "ddg":
+                config.block_marker().unlink(missing_ok=True)
+            return results
+        self.blocked = True
+        raise last
 
     def _respect_earlier_block(self):
         marker = config.block_marker()
@@ -270,8 +312,7 @@ class SearchClient:
             return
         left = config.block_minutes() * 60 - (time.time() - at)
         if left > 0:
-            self.blocked = True
-            raise SearchBlocked(
+            raise SearchQuiet(
                 f"DuckDuckGo blocked this IP {int((time.time() - at) / 60)} minutes ago. Staying quiet for another "
                 f"{int(left / 60) + 1} minutes, because searching while blocked can extend it. "
                 "Set SHADOWCRUMBS_IGNORE_BLOCK=1 to try anyway, or use a Brave key."

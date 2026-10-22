@@ -1,5 +1,6 @@
 """Settings. Everything is read at call time so tests and env overrides just work."""
 import os
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -87,16 +88,67 @@ def searxng_url() -> str:
     return os.environ.get("SHADOWCRUMBS_SEARXNG_URL", "").strip()
 
 
-def search_provider(tier: str) -> str:
-    """Search tier uses the search engine. Deep tier prefers an API when a key exists."""
+def search_chain(tier: str) -> list[str]:
+    """Search engines to try, best first. A throttle on one moves on to the next instead of ending the run.
+    Brave (an API, so no CAPTCHAs) then your own SearXNG, then DuckDuckGo as the last resort.
+    SHADOWCRUMBS_SEARCH forces exactly one and turns the fallback off."""
     forced = os.environ.get("SHADOWCRUMBS_SEARCH")
     if forced:
-        return forced
+        return [forced]
+    chain = []
+    if os.environ.get("BRAVE_API_KEY"):
+        chain.append("brave")
     if searxng_url():
-        return "searxng"
-    if tier == "deep" and os.environ.get("BRAVE_API_KEY"):
-        return "brave"
-    return "ddg"
+        chain.append("searxng")
+    return chain + ["ddg"]
+
+
+def search_provider(tier: str) -> str:
+    """The engine tried first."""
+    return search_chain(tier)[0]
+
+
+KEY_NAMES = ("BRAVE_API_KEY", "GITHUB_TOKEN", "HIBP_API_KEY", "DEHASHED_API_KEY", "URLSCAN_API_KEY")
+
+
+def env_file() -> Path:
+    raw = os.environ.get("SHADOWCRUMBS_ENV_FILE", "").strip()
+    return Path(raw).expanduser() if raw else ROOT / ".env"
+
+
+def load_env_file() -> tuple[list[str], str | None]:
+    """Read KEY=value lines from .env into the environment, so keys stay out of shell history and profiles.
+    Returns (names loaded, a problem or None). Never returns or logs a value.
+    Refuses a file other users can read: chmod 600 .env. A variable already set in the environment wins."""
+    path = env_file()
+    try:
+        st = path.stat()
+    except FileNotFoundError:
+        return [], None
+    except OSError as e:
+        return [], f"could not read {path.name}: {type(e).__name__}"
+    if os.name == "posix" and st.st_mode & 0o077:
+        return [], f"{path.name} is readable by other users, so it was not loaded. Run: chmod 600 {path}"
+    loaded = []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError) as e:
+        return [], f"could not read {path.name}: {type(e).__name__}"
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        if line.startswith("export "):
+            line = line[7:].lstrip()
+        name, _, value = line.partition("=")
+        name, value = name.strip(), value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        if not re.fullmatch(r"[A-Z][A-Z0-9_]*", name) or not value or name in os.environ:
+            continue
+        os.environ[name] = value
+        loaded.append(name)
+    return loaded, None
 
 
 def allowed_hosts() -> set[str]:

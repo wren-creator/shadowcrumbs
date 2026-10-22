@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from shadowcrumbs import custom_sources, verify  # noqa: E402
+from shadowcrumbs import config, custom_sources, verify  # noqa: E402
 from shadowcrumbs.plugin import load_plugins  # noqa: E402
 
 MARK = {"ok": "OK     ", "fail": "FAIL   ", "warn": "WARN   ", "missing": "MISSING", "unchecked": "-      "}
@@ -28,6 +28,9 @@ def main(argv=None):
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--strict", action="store_true", help="fail on warnings and missing keys too")
     a = ap.parse_args(argv)
+    _, problem = config.load_env_file()
+    if problem:
+        print(f"WARNING: {problem}", file=sys.stderr)
 
     load_plugins()
     custom_sources.sync()
