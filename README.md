@@ -72,7 +72,18 @@ Sources marked **ACTIVE** in the dashboard send traffic to the client's own syst
 
 ## Adding a data source
 
-Drop a `.py` file in `plugins_user/`. It loads on the next start, no core changes. For tools you do not want in a public repo, keep them in a folder of your own and set `SHADOWCRUMBS_PERSONAL_PLUGINS` to it (several folders separated by `:`). Those load too, and never touch this repo. See `plugins_user/wayback_urls.py` for a working one. The whole contract:
+**Start from the template.** One command makes a working file with your name, category and queries filled in:
+
+```bash
+python tools/new_plugin.py careers_tech --tier search --category tech \
+    --query 'site:{d} careers' --query '"{company}" "experience with"'
+
+python tools/new_plugin.py vendor_api --tier deep --category infrastructure --key-env VENDOR_API_KEY
+```
+
+`{d}` is the target domain and `{company}` the company name. A query that needs a field the target does not have is dropped, not searched as the word "None". The search file works as soon as you restart: its three numbered comments mark the only spots you edit (the queries, what counts as theirs, what gets recorded). The deep file shows as skipped until you fill in the endpoint, and it keeps the key in a header and out of the URL. The command refuses to overwrite a file, refuses a name that is taken, and writes a name only if it is plain `snake_case`, so it cannot be steered outside the folder. `--dir` writes somewhere else, for example one of your `SHADOWCRUMBS_PERSONAL_PLUGINS` folders. The two templates themselves are `plugins_user/_template_search.py` and `plugins_user/_template_deep.py`, real Python you can read and copy by hand. Files starting with `_` are never loaded.
+
+Or by hand: drop a `.py` file in `plugins_user/`. It loads on the next start, no core changes. For tools you do not want in a public repo, keep them in a folder of your own and set `SHADOWCRUMBS_PERSONAL_PLUGINS` to it (several folders separated by `:`). Those load too, and never touch this repo. See `plugins_user/wayback_urls.py` for a working one. The whole contract:
 
 ```python
 from shadowcrumbs.plugin import Finding, Plugin, register
@@ -171,7 +182,8 @@ shadowcrumbs/
   signatures.py              tech fingerprints
   plugins/search_plugins.py  search tier sources
   plugins/deep_plugins.py    deep dive sources
-plugins_user/                your own sources
+plugins_user/                your own sources, plus the two templates (files starting with _ are never loaded)
+tools/new_plugin.py          makes a new source from the template
 static/                      the dashboard (index.html) and the admin page (admin.html)
 fixtures/demo.json           offline demo data
 tests/                       pytest suite

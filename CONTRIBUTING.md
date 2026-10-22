@@ -27,7 +27,7 @@ All the tests should pass before you start (the browser test skips itself if the
 
 ## Adding a data source
 
-This is the contribution I'd love most, and it needs no changes to the core. A source is one Python class:
+This is the contribution I'd love most, and it needs no changes to the core. The quickest start is `python tools/new_plugin.py my_source --tier search --category tech --query 'site:{d} something'`, which writes a working file from the template (see the README). A source is one Python class:
 
 ```python
 from shadowcrumbs.plugin import Finding, Plugin, register
