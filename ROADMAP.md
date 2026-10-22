@@ -12,6 +12,9 @@ In order. Items marked **needs a key** can wait until there is one, so skip down
 
 ## Backlog
 
+- [ ] Run a real scan on a larger authorised domain to measure the exposure queries and check the relevance filters are not too strict (the company-name queries returned about 20 results each and every one was filtered out)
+- [ ] Check what the Brave plan allows per month: the verify check showed 0 for the monthly count, which may mean no cap or may be a real limit
+
 - [ ] Measure the hit rate of the new exposure queries on an authorised domain from the new network, then keep what earns its 8 seconds and drop the rest
 - [ ] Snippet-free extractor for custom sources, so backup and config file searches (`ext:bak`, `ext:sql`) can be added without keeping text that might hold a secret
 
@@ -47,5 +50,5 @@ The full list of candidate sources, and where each one fits, is in [docs/DATA-SO
 - [x] Sources page (2026-10-21): the team adds search data points from the dashboard with no code, hot reloaded, shareable by export or one shared file, with a revision lock. Data only, so it cannot run code or reach a client
 - [x] Verify step (2026-10-21): checks each source's endpoint and key plus the search engines, on the admin page and with `tools/verify_sources.py`. Asks about example.com only, never queries DuckDuckGo live, keys scrubbed. Public services checked live; HIBP and DeHashed still need a real key
 - [x] SearXNG suspended-engine handling (2026-10-21, idea from Kev Milne's EZRecon): an empty answer caused by throttled upstream engines retries once, then raises a block naming the engines, so it is never cached as "no footprint" for a week
-- [x] `.env` loading and a search fallback chain (2026-10-21): Brave, then SearXNG, then DuckDuckGo, moving on when one is throttled. Brave runs at a query a second. Not yet run with a real key
+- [x] `.env` loading and a search fallback chain (2026-10-21): Brave, then SearXNG, then DuckDuckGo, moving on when one is throttled. Brave runs at a query a second. First live run 2026-10-22: 34 searches through Brave in 61 seconds, no block, on a small domain with little exposed, so the query hit rate is still unmeasured
 - [x] Custom search queries (2026-10-21): `exposure_search` plugin plus a seven-query importable pack in `source_packs/`. Hit rate on a real domain not measured yet
