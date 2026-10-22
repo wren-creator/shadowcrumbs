@@ -18,6 +18,7 @@ In order. Items marked **needs a key** can wait until there is one, so skip down
 - [ ] More search providers (Bing) as a fallback for DDG throttling
 - [ ] Optional opt-in to keep plaintext secrets, with masked exports, if a real engagement needs it
 - [ ] Optional config flag to relax the authorization gate
+- [ ] No-code search data points: a plain file of queries with a category and a regex per line, loaded without writing a class. The template covers the code route today
 - [ ] ROE register export (CSV or PDF) for the engagement file, with spreadsheet formula characters escaped
 - [ ] Keep a ledger of deleted engagements (name, ROE history, deleted at) outside the engagement databases, so the register can still list them. Today only the app log remembers
 - [ ] Log retention setting, and a way to clear one engagement's run events from the admin page
@@ -38,3 +39,4 @@ The full list of candidate sources, and where each one fits, is in [docs/DATA-SO
 - [x] SearXNG provider plus `tools/searxng.sh` (2026-10-09): local Docker instance, checked live. Only one upstream engine answered from this network, the rest were CAPTCHA or suspended
 - [x] ROE audit trail (2026-10-21): every authorization change records who and when, append only, mirrored to the app log. Admin page lists it per engagement
 - [x] Scan logs (2026-10-21): per-run events in each engagement database plus a rotating app log, one redaction function in front of both, viewable on the admin page
+- [x] Plugin templates and `tools/new_plugin.py` (2026-10-21): search and deep starters, name and path checks, never overwrites, tested by scaffolding and running one against the demo data
