@@ -12,7 +12,7 @@ In order. Items marked **needs a key** can wait until there is one, so skip down
 
 ## Backlog
 
-- [ ] Run a real scan on a larger authorised domain to measure the exposure queries and check the relevance filters are not too strict (the company-name queries returned about 20 results each and every one was filtered out)
+- [ ] Measure the exposure queries on a domain that really has something exposed (a client, or a lab you set up). toysrus.com (2026-10-22, search tier only, public listings) gave 0 true hits from the new exposure queries, which is expected for a large retail site, so it proves the noise filters but not the hit rate
 - [ ] Check what the Brave plan allows per month: the verify check showed 0 for the monthly count, which may mean no cap or may be a real limit
 
 - [ ] Measure the hit rate of the new exposure queries on an authorised domain from the new network, then keep what earns its 8 seconds and drop the rest
@@ -52,3 +52,4 @@ The full list of candidate sources, and where each one fits, is in [docs/DATA-SO
 - [x] SearXNG suspended-engine handling (2026-10-21, idea from Kev Milne's EZRecon): an empty answer caused by throttled upstream engines retries once, then raises a block naming the engines, so it is never cached as "no footprint" for a week
 - [x] `.env` loading and a search fallback chain (2026-10-21): Brave, then SearXNG, then DuckDuckGo, moving on when one is throttled. Brave runs at a query a second. First live run 2026-10-22: 34 searches through Brave in 61 seconds, no block, on a small domain with little exposed, so the query hit rate is still unmeasured
 - [x] Custom search queries (2026-10-21): `exposure_search` plugin plus a seven-query importable pack in `source_packs/`. Hit rate on a real domain not measured yet
+- [x] Larger public domain check (2026-10-22, toysrus.com, search tier only): 36 searches through Brave in 70 seconds, no throttling. Found that 8 of 10 emails were example addresses from email-format sites and one cloud storage hit was a textbook page, both now filtered. Wayback fix: patient retries, and the interesting-URL filter no longer matches host names

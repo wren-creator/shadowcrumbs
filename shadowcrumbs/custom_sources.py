@@ -18,7 +18,7 @@ import threading
 from . import config, log
 from .plugin import REGISTRY, Finding, Plugin
 from .store import clean_person, now
-from .util import EMAIL_RE, clip, hostname, in_domain
+from .util import EMAIL_RE, clip, hostname, in_domain, placeholder_email
 
 PREFIX = "custom_"
 EXTRACTORS = {
@@ -194,7 +194,7 @@ class CustomSource(Plugin):
         elif kind == "email":
             for m in EMAIL_RE.findall(f"{r.title} {r.snippet}"):
                 e = m.lower().strip(".")
-                if d and e.split("@", 1)[1].endswith(d):
+                if d and e.split("@", 1)[1].endswith(d) and not placeholder_email(e, in_domain(host, d)):
                     yield e, r.url, clip(r.snippet, 120)
         elif kind == "document":
             from .plugins.search_plugins import doc_ext

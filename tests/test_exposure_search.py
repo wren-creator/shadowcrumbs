@@ -56,3 +56,25 @@ def test_pack_is_valid_and_imports_cleanly(tmp_path, monkeypatch):
     assert sources and all(custom_sources.clean(x) for x in sources)
     out = custom_sources.import_sources(sources, author="Tester")
     assert out["imported"] == len(sources) and out["skipped"] == []
+
+
+def test_example_addresses_from_format_sites_are_dropped_but_real_ones_stay():
+    table = {"email format": [Result("RocketReach", "https://rocketreach.co/acme",
+                                     "jane.doe@acme.test jdoe@acme.test first.last@acme.test firstinitiallastname@acme.test "
+                                     "customerservice@acme.test priya.nair@acme.test")]}
+    _, found = run(table, {"company": "Acme", "domain": "acme.test"})
+    got = {f.value for f in found if f.category == "emails"}
+    assert got == {"customerservice@acme.test", "priya.nair@acme.test"}
+
+
+def test_the_targets_own_page_may_list_example_names_but_never_templates():
+    table = {"email format": [Result("Contact", "https://www.acme.test/contact", "jane.doe@acme.test first.last@acme.test")]}
+    _, found = run(table, {"company": "Acme", "domain": "acme.test"})
+    assert {f.value for f in found if f.category == "emails"} == {"jane.doe@acme.test"}
+
+
+def test_a_page_that_only_mentions_the_client_is_not_their_cloud_storage():
+    table = {"s3.amazonaws.com": [Result("Retail Management, Acme case study", "https://s3.amazonaws.com/lumenlearning/ch4", "Acme"),
+                                  Result("backups", "https://acme-backups.s3.amazonaws.com/db", "")]}
+    _, found = run(table, {"company": "Acme", "domain": "acme.test"})
+    assert [f.value for f in found if f.category == "infrastructure"] == ["cloud storage: acme-backups.s3.amazonaws.com/db"]
