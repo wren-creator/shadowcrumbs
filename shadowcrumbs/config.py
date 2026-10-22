@@ -90,7 +90,8 @@ def searxng_url() -> str:
 
 def search_chain(tier: str) -> list[str]:
     """Search engines to try, best first. A throttle on one moves on to the next instead of ending the run.
-    Brave (an API, so no CAPTCHAs) then your own SearXNG, then DuckDuckGo as the last resort.
+    Brave (an API, so no CAPTCHAs) then your own SearXNG, then DuckDuckGo, then Exa. Exa goes last on purpose:
+    it is a free account with a credit limit, so it only spends credits on what the others could not answer.
     SHADOWCRUMBS_SEARCH forces exactly one and turns the fallback off."""
     forced = os.environ.get("SHADOWCRUMBS_SEARCH")
     if forced:
@@ -100,7 +101,10 @@ def search_chain(tier: str) -> list[str]:
         chain.append("brave")
     if searxng_url():
         chain.append("searxng")
-    return chain + ["ddg"]
+    chain.append("ddg")
+    if os.environ.get("EXA_API_KEY"):
+        chain.append("exa")
+    return chain
 
 
 def search_provider(tier: str) -> str:
@@ -108,7 +112,7 @@ def search_provider(tier: str) -> str:
     return search_chain(tier)[0]
 
 
-KEY_NAMES = ("BRAVE_API_KEY", "GITHUB_TOKEN", "HIBP_API_KEY", "DEHASHED_API_KEY", "URLSCAN_API_KEY")
+KEY_NAMES = ("BRAVE_API_KEY", "GITHUB_TOKEN", "HIBP_API_KEY", "DEHASHED_API_KEY", "URLSCAN_API_KEY", "EXA_API_KEY")
 
 
 def env_file() -> Path:

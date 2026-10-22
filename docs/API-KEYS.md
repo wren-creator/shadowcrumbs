@@ -24,6 +24,13 @@ Get it: https://brave.com/search/api/ (sign up, pick a plan, create a key in the
 Cost: it is a paid service, and plans change, so read the plan page before you enter a card. As of 2026-10-22 one plan listed $5 per 1,000 requests (half a cent a query), $5 of free credit every month, and 50 requests per second. A full scan is roughly 36 to 40 queries, so about 20 cents, and results are cached per engagement for a week, so a re-run costs nothing. The verify check prints requests left per second and per month, and a monthly 0 there means the plan has no monthly cap, not that you are out.
 Pace: Brave queries go out about a second apart by default, which is safe on slower plans. On a 50 per second plan you can speed a scan up with `SHADOWCRUMBS_SEARCH_DELAY=0.2` in `.env`. Too fast on a slow plan gets a 429, and the scan moves on to the next search engine.
 
+### Exa (`EXA_API_KEY`)
+Why: a backup for when everything ahead of it in the search chain is throttled. It is an API, so no CAPTCHAs and no IP throttling.
+Get it: https://dashboard.exa.ai/api-keys (a free account works).
+Cost: the free account has a credit limit, which is why Exa sits at the very end of the chain and is only asked after Brave, SearXNG and DuckDuckGo have all failed. Check the pricing page for the current free credit. If the credits run out (402) or the key is refused, Exa is switched off for the rest of that run and the scan carries on without it.
+Caveat: Exa is a neural search engine, not a keyword one. It reads `site:` and quoted phrases, but it treats them loosely and can answer a dork with pages that only look related. If nothing matches a `site:` restriction, Exa quietly drops it and answers anyway, so Shadowcrumbs treats that case as no results instead of keeping the unrelated pages. Expect thinner and fuzzier dork results than from Brave.
+Pace: about two queries a second unless you set `SHADOWCRUMBS_SEARCH_DELAY`. Exa's default limit is ten a second.
+
 ### GitHub token (`GITHUB_TOKEN`)
 Why: GitHub code search finds public repos, hostnames and addresses that mention the domain. It only returns metadata, no code is kept, and private repos are dropped.
 Get it: https://github.com/settings/personal-access-tokens/new (a fine-grained token).

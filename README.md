@@ -37,7 +37,7 @@ To run the whole stack with your own SearXNG in one go (needs Docker running), u
 
 **Keys.** [docs/API-KEYS.md](docs/API-KEYS.md) says what each key unlocks and links to where you get it (Brave and a free GitHub token are the two that matter for a first scan). Copy `env.example` to `.env`, fill in what you have, and run `chmod 600 .env`. Shadowcrumbs loads it at start, so keys stay out of your shell history. A variable already set in your shell wins. A `.env` that other users can read is not loaded, and it says so. `./shadowcrumbs.sh status` shows which of the Brave and GitHub keys are set, names only.
 
-**Search engines and fallback.** The search tier tries, in order: Brave (when `BRAVE_API_KEY` is set), your own SearXNG (when `SHADOWCRUMBS_SEARXNG_URL` is set), then DuckDuckGo. If one is throttled, the run moves on to the next instead of stopping, and an engine that blocked you is not asked again until the next run. Brave is paced at about a query a second unless you set `SHADOWCRUMBS_SEARCH_DELAY`. DuckDuckGo keeps its long pace and its one hour quiet period. `SHADOWCRUMBS_SEARCH=name` forces a single engine and turns the fallback off.
+**Search engines and fallback.** The search tier tries, in order: Brave (when `BRAVE_API_KEY` is set), your own SearXNG (when `SHADOWCRUMBS_SEARXNG_URL` is set), then DuckDuckGo, then Exa (when `EXA_API_KEY` is set, kept last because a free account has a credit limit). If one is throttled, the run moves on to the next instead of stopping, and an engine that blocked you is not asked again until the next run. Brave is paced at about a query a second and Exa at two a second, unless you set `SHADOWCRUMBS_SEARCH_DELAY`. DuckDuckGo keeps its long pace and its one hour quiet period. `SHADOWCRUMBS_SEARCH=name` forces a single engine and turns the fallback off.
 
 Switches for `start.sh`: `--demo`, `--port N`, `--delay SECS` (pause between live search queries), `--foreground` (stay in the terminal, Ctrl-C to stop), `--status`, `--help`. It builds `.venv` on first run if one isn't there. Logs go to `shadowcrumbs.log`.
 
@@ -210,7 +210,7 @@ Honest limits. The HIBP check was written from the vendor's docs and tested agai
 
 ## API keys and tokens
 
-Keys live in environment variables, never in a file inside this repo: `BRAVE_API_KEY`, `HIBP_API_KEY`, `DEHASHED_API_KEY`, `URLSCAN_API_KEY` (optional), `GITHUB_TOKEN`. `.env` files are gitignored as a backstop, and GitHub secret scanning is on for the repo. Shadowcrumbs only ever puts a key in the request header that needs it. It never writes one to a finding, a log, the query cache, or an error message, and the tests check that.
+Keys live in environment variables, never in a file inside this repo: `BRAVE_API_KEY`, `EXA_API_KEY` (optional), `HIBP_API_KEY`, `DEHASHED_API_KEY`, `URLSCAN_API_KEY` (optional), `GITHUB_TOKEN`. `.env` files are gitignored as a backstop, and GitHub secret scanning is on for the repo. Shadowcrumbs only ever puts a key in the request header that needs it. It never writes one to a finding, a log, the query cache, or an error message, and the tests check that.
 
 For `github_code_search`, make a **fine-grained token with read access to public repositories only**, no private repo access. A broader token such as the one from `gh auth token` can make GitHub's search return hits from your own private repos. The plugin drops anything that is not public, but a token that cannot see private code in the first place is the better guard. The plugin keeps only the repo, file path, hostnames and addresses from a hit, never the code itself, because public repos leak secrets and none of that belongs in an engagement database. Code search allows about 10 requests a minute, so a run reads two pages at most.
 
@@ -235,6 +235,7 @@ Heads up: HIBP and DeHashed are third parties. Running them sends the addresses 
 | `searxng` | Both tiers, first choice whenever the URL is set | `SHADOWCRUMBS_SEARXNG_URL`, your own [SearXNG](https://docs.searxng.org/) instance with `json` under `search.formats` |
 | `ddg` | Search tier default | Nothing |
 | `brave` | Deep dive, automatically, when the key exists | `BRAVE_API_KEY` |
+| `exa` | Last in the chain, only when the others are throttled | `EXA_API_KEY` |
 | `fixture` | Demos and tests | `SHADOWCRUMBS_FIXTURE` |
 
 **Running your own SearXNG.** `./tools/searxng.sh up` starts one in Docker, bound to 127.0.0.1:8888 with JSON output on and a random secret generated on your machine (`tools/searxng/.secret`, gitignored). Then `export SHADOWCRUMBS_SEARXNG_URL=http://127.0.0.1:8888` before `./start.sh`. `./tools/searxng.sh down` stops it. Checked live on 2026-10-09: it returned 10 results per query for `site:`, `filetype:` and `OR` searches. Honest caveat: SearXNG relays to other engines, and from my network DuckDuckGo and Startpage showed it CAPTCHAs and Brave suspended it for too many requests, so one engine did all the answering. Check `unresponsive_engines` in its JSON output if results look thin.

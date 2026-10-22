@@ -4,6 +4,7 @@ Providers:
   ddg      DuckDuckGo HTML endpoint, no key, the default
   brave    Brave Search API, used on deep dives when BRAVE_API_KEY is set
   searxng  your own SearXNG instance (SHADOWCRUMBS_SEARXNG_URL), no key, used first when set
+  exa      Exa search API, the last resort in the chain when EXA_API_KEY is set (free tier, so it is a quota to spare)
   fixture  canned results from a JSON file, for demos and tests
 """
 import json
@@ -112,6 +113,40 @@ class Brave:
         ]
 
 
+class Exa:
+    """Exa's search API. Last in the chain, so a free account's credits only go on queries every other engine missed."""
+
+    name = "exa"
+
+    def search(self, query, n):
+        key = os.environ.get("EXA_API_KEY")
+        if not key:
+            raise RuntimeError("EXA_API_KEY is not set")
+        r = requests.post(
+            "https://api.exa.ai/search",
+            json={"query": query, "numResults": min(n, 100), "contents": {"highlights": {"maxCharacters": 300}}},
+            headers={"x-api-key": key, "Content-Type": "application/json", "Accept": "application/json"},
+            timeout=config.http_timeout(),
+        )
+        if r.status_code == 429:
+            raise SearchBlocked("Exa rate limit hit")
+        if r.status_code in (401, 402, 403, 503):
+            # a bad key or used up credits fails every query, so treat it as a block and stop spending on it this run
+            raise SearchBlocked(f"Exa refused the request ({r.status_code}). Check EXA_API_KEY and your credits.")
+        r.raise_for_status()
+        data = r.json()
+        # When nothing matches a site: restriction, Exa quietly drops it and answers with unrelated pages. Taking
+        # those as hits would invent a footprint for the client, so an answer that needed relaxing counts as empty.
+        if any(x.get("code") == "RESTRICTIONS_RELAXED" for x in data.get("notices") or []):
+            return []
+        out = []
+        for x in data.get("results") or []:
+            hl = x.get("highlights")
+            snippet = " ".join(hl) if isinstance(hl, list) else (hl or "")
+            out.append(Result(x.get("title") or "", x.get("url") or "", re.sub(r"\s+", " ", snippet).strip()))
+        return out[:n]
+
+
 class SearXNG:
     """A SearXNG instance you run yourself. It needs `json` listed under search.formats in its settings."""
 
@@ -195,6 +230,8 @@ def make_provider(tier, name=None):
         return Brave()
     if name == "searxng":
         return SearXNG()
+    if name == "exa":
+        return Exa()
     if name == "fixture":
         path = os.environ.get("SHADOWCRUMBS_FIXTURE")
         if not path:
@@ -209,6 +246,7 @@ def make_chain(tier):
 
 
 BRAVE_PACE = 1.2   # seconds. Brave's plans allow about a query a second, and an API has no CAPTCHA to be polite about
+EXA_PACE = 0.5     # seconds. Exa allows 10 queries a second by default; this stays well under it
 
 
 class SearchClient:
@@ -261,9 +299,12 @@ class SearchClient:
         return next((p for p in self.chain if p.name not in self._down), self.chain[-1])
 
     def _delay_for(self, provider):
-        """Brave is an API, so it gets a short pace unless you set one yourself. Everything else uses the long one."""
-        if provider.name == "brave" and not self._explicit_delay:
-            return BRAVE_PACE
+        """Brave and Exa are APIs, so they get a short pace unless you set one yourself. Everything else uses the long one."""
+        if not self._explicit_delay:
+            if provider.name == "brave":
+                return BRAVE_PACE
+            if provider.name == "exa":
+                return EXA_PACE
         return self.delay
 
     def _live(self, query, n):

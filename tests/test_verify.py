@@ -46,6 +46,9 @@ class FakeHttp:
     def head(self, url, timeout=None, **kw):
         return self._answer("HEAD", url, kw)
 
+    def post(self, url, timeout=None, **kw):
+        return self._answer("POST", url, kw)
+
     def get_json(self, url, timeout=None):
         r = self._answer("GET", url, {})
         if r.status_code == 404:
@@ -208,6 +211,20 @@ def test_duckduckgo_is_never_queried_live_and_reports_the_recorded_block(monkeyp
     marker.write_text(json.dumps({"at": time.time() - 600}))
     blocked = verify.check_provider("search", http)
     assert blocked["status"] == "warn" and "blocked this IP 10 minutes ago" in blocked["detail"] and http.calls == []
+
+
+def test_exa_key_check_and_its_cost(monkeypatch):
+    monkeypatch.setenv("SHADOWCRUMBS_SEARCH", "exa")
+    assert verify.check_provider("deep", FakeHttp())["status"] == "missing"
+    monkeypatch.setenv("EXA_API_KEY", KEY)
+    http = FakeHttp({"exa.ai": Resp(200, {})})
+    r = verify.check_provider("deep", http)
+    assert r["status"] == "ok" and r["cost"] == "uses one search from your Exa credits"
+    assert http.calls[0][0] == "POST" and http.calls[0][2]["headers"]["x-api-key"] == KEY and KEY not in http.calls[0][1]
+    assert KEY not in str(r)
+    assert verify.check_provider("deep", FakeHttp({"exa.ai": Resp(401)}))["status"] == "fail"
+    assert verify.check_provider("deep", FakeHttp({"exa.ai": Resp(402)}))["status"] == "warn"
+    assert verify.check_provider("deep", FakeHttp({"exa.ai": Resp(429)}))["status"] == "warn"
 
 
 def test_brave_key_check_and_its_cost(monkeypatch):

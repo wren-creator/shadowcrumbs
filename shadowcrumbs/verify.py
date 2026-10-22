@@ -81,6 +81,8 @@ def check_provider(tier, http):
             status, detail, cost = _check_brave(http)
         elif name == "searxng":
             status, detail = _check_searxng(http)
+        elif name == "exa":
+            status, detail, cost = _check_exa(http)
         elif name == "fixture":
             path = os.environ.get("SHADOWCRUMBS_FIXTURE", "")
             status, detail = ("ok", "canned demo data, no network") if os.path.isfile(path) else ("fail", f"SHADOWCRUMBS_FIXTURE is not a file: {path or '(not set)'}")
@@ -122,6 +124,23 @@ def _check_brave(http):
     r.raise_for_status()
     left = r.headers.get("X-RateLimit-Remaining")
     return "ok", "key accepted" + (f", requests left (per second, per month): {left}" if left else ""), cost
+
+
+def _check_exa(http):
+    key = os.environ.get("EXA_API_KEY")
+    if not key:
+        return "missing", "needs EXA_API_KEY", ""
+    r = http.post("https://api.exa.ai/search", json={"query": "example", "numResults": 1}, timeout=TIMEOUT,
+                  headers={"x-api-key": key, "Content-Type": "application/json", "Accept": "application/json"})
+    cost = "uses one search from your Exa credits"
+    if r.status_code in (401, 403):
+        return "fail", f"Exa rejected the key ({r.status_code}). Check EXA_API_KEY.", cost
+    if r.status_code == 402:
+        return "warn", "Exa says the credits are used up (402). The key is accepted, but searches will be refused.", cost
+    if r.status_code == 429:
+        return "warn", "Exa rate limited this check (429). The key may be fine, or the limit was hit.", cost
+    r.raise_for_status()
+    return "ok", "key accepted", cost
 
 
 def _check_searxng(http):

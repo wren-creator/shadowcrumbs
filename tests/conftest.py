@@ -14,6 +14,7 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv("SHADOWCRUMBS_SEARCH", "fixture")
     monkeypatch.setenv("SHADOWCRUMBS_FIXTURE", str(ROOT / "fixtures" / "demo.json"))
     monkeypatch.setenv("SHADOWCRUMBS_SEARCH_DELAY", "0")
+    monkeypatch.delenv("EXA_API_KEY", raising=False)   # a key in the developer's shell must not change the search chain
     monkeypatch.setenv("SHADOWCRUMBS_ALLOWED_HOSTS", "testserver")   # TestClient's default Host
     from shadowcrumbs import engine
     engine.STATE.clear()

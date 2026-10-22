@@ -275,3 +275,103 @@ def test_brave_gets_a_short_pace_unless_you_set_one(monkeypatch):
     monkeypatch.setenv("SHADOWCRUMBS_SEARCH_DELAY", "5")
     c = search.SearchClient([search.Brave.__new__(search.Brave)], None, sleep=waits.append)
     assert c._delay_for(c.chain[0]) == 5                   # your setting wins
+
+
+# Exa -----------------------------------------------------------------------------------------------
+
+EXA_OK = {
+    "requestId": "r1",
+    "results": [
+        {"title": "Careers at Acme", "url": "https://acme-demo.test/careers", "highlights": ["Join the", "Acme team."]},
+        {"title": "Bare", "url": "https://acme-demo.test/x"},
+        {"title": "Str", "url": "https://acme-demo.test/y", "highlights": "one   string"},
+    ],
+}
+
+
+def test_exa_is_last_in_the_chain_and_only_with_a_key(monkeypatch):
+    monkeypatch.delenv("SHADOWCRUMBS_SEARCH", raising=False)
+    monkeypatch.delenv("BRAVE_API_KEY", raising=False)
+    assert [p.name for p in search.make_chain("search")] == ["ddg"]
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    assert [p.name for p in search.make_chain("search")] == ["ddg", "exa"]
+    assert search.make_provider("search").name == "ddg"          # a free account's credits are not spent first
+    monkeypatch.setenv("BRAVE_API_KEY", "k")
+    monkeypatch.setenv("SHADOWCRUMBS_SEARXNG_URL", "http://127.0.0.1:8888")
+    assert [p.name for p in search.make_chain("deep")] == ["brave", "searxng", "ddg", "exa"]
+    monkeypatch.setenv("SHADOWCRUMBS_SEARCH", "exa")
+    assert config.search_chain("deep") == ["exa"]                # forcing it still works
+
+
+def test_exa_request_and_parsing(monkeypatch):
+    monkeypatch.setenv("EXA_API_KEY", "secret-exa-key")
+    sent = {}
+
+    def fake_post(url, **kw):
+        sent.update(url=url, **kw)
+        return JsonResp(EXA_OK)
+
+    monkeypatch.setattr(search.requests, "post", fake_post)
+    out = search.Exa().search('site:acme-demo.test "careers"', 2)
+    assert sent["url"] == "https://api.exa.ai/search"
+    assert sent["headers"]["x-api-key"] == "secret-exa-key"
+    assert sent["json"]["query"] == 'site:acme-demo.test "careers"' and sent["json"]["numResults"] == 2
+    assert [(r.title, r.url, r.snippet) for r in out] == [
+        ("Careers at Acme", "https://acme-demo.test/careers", "Join the Acme team."),
+        ("Bare", "https://acme-demo.test/x", ""),
+    ]                                                              # n caps the answer, a missing highlight is just empty
+    assert search.Exa().search("q", 5)[2].snippet == "one string"  # a plain string highlight and spacing are tidied
+
+
+def test_exa_dropping_the_site_restriction_counts_as_no_results(monkeypatch):
+    """Exa answers with unrelated pages when nothing matched site:. Those must never become findings."""
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    relaxed = dict(EXA_OK, notices=[{"code": "RESTRICTIONS_RELAXED", "details": {"relaxed": [{"kind": "site"}]}}])
+    monkeypatch.setattr(search.requests, "post", lambda *a, **k: JsonResp(relaxed))
+    assert search.Exa().search("site:acme-demo.test", 10) == []
+
+
+@pytest.mark.parametrize("status", [401, 402, 403, 429, 503])
+def test_exa_refusals_are_blocks_so_the_run_stops_spending_on_it(monkeypatch, status):
+    monkeypatch.setenv("EXA_API_KEY", "k")
+    monkeypatch.setattr(search.requests, "post", lambda *a, **k: Resp("", status))
+    with pytest.raises(search.SearchBlocked, match="Exa"):
+        search.Exa().search("q", 5)
+
+
+def test_exa_without_a_key_says_so(monkeypatch):
+    monkeypatch.delenv("EXA_API_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="EXA_API_KEY"):
+        search.Exa().search("q", 5)
+
+
+def test_exa_only_answers_after_everything_ahead_of_it_has_blocked():
+    ddg, exa = Blocking(name="ddg"), Blocking(name="exa", ok=99)
+    c = _client([ddg, exa])
+    assert len(c.search("q1")) == 1 and c.provider.name == "exa"
+    c.search("q2")
+    assert ddg.calls == 1 and exa.calls == 2                       # DuckDuckGo is not asked again this run
+
+
+def test_exa_blocking_ends_live_searching_and_is_not_asked_again():
+    ddg, exa = Blocking(name="ddg"), Blocking(name="exa")
+    c = _client([ddg, exa])
+    for q in ("q1", "q2", "q3"):
+        with pytest.raises(search.SearchBlocked):
+            c.search(q)
+    assert ddg.calls == 1 and exa.calls == 1 and c.blocked          # one refusal each, then nothing more is sent
+
+
+def test_exa_blocking_does_not_set_the_duckduckgo_block_marker():
+    c = _client([Blocking(name="brave", ok=99), Blocking(name="exa")])
+    c.search("q")
+    assert not config.block_marker().exists()
+
+
+def test_exa_gets_a_short_pace_unless_you_set_one(monkeypatch):
+    monkeypatch.delenv("SHADOWCRUMBS_SEARCH_DELAY", raising=False)
+    c = search.SearchClient([Blocking(name="ddg"), search.Exa()], None, sleep=lambda s: None)
+    assert c._delay_for(c.chain[1]) == search.EXA_PACE and c._delay_for(c.chain[0]) == 8
+    monkeypatch.setenv("SHADOWCRUMBS_SEARCH_DELAY", "5")
+    c = search.SearchClient([search.Exa()], None, sleep=lambda s: None)
+    assert c._delay_for(c.chain[0]) == 5                           # your setting wins
