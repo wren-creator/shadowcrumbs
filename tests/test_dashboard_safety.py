@@ -23,15 +23,15 @@ FORBIDDEN = [
 ]
 
 
-@pytest.mark.parametrize("path", ["static/app.js", "static/index.html"])
+@pytest.mark.parametrize("path", ["static/app.js", "static/index.html", "static/admin.js", "static/admin.html"])
 def test_dashboard_source_has_no_way_to_make_markup_or_code_from_strings(path):
     text = (ROOT / path).read_text(encoding="utf-8")
     code = re.sub(r"//[^\n]*", "", text) if path.endswith(".js") else text      # a comment may name the rule
     for pattern in FORBIDDEN:
         assert not re.search(pattern, code), f"{path} uses {pattern}. Render scraped text with textContent only."
     if path.endswith(".html"):
-        assert not re.search(r"\bon[a-z]+\s*=", code, re.I), "inline event handlers in index.html"
-        assert not re.search(r"<script(?![^>]*\bsrc=)[^>]*>", code), "inline script in index.html"
+        assert not re.search(r"\bon[a-z]+\s*=", code, re.I), f"inline event handlers in {path}"
+        assert not re.search(r"<script(?![^>]*\bsrc=)[^>]*>", code), f"inline script in {path}"
 
 
 def test_only_http_and_https_urls_pass_the_link_filter():
@@ -100,13 +100,20 @@ def live_app():
 
 def plant_hostile_data():
     from shadowcrumbs.store import Store
-    s = Store.create(PAYLOAD_IMG, company=PAYLOAD_SCRIPT, domain="acme-demo.test", auth_ref=PAYLOAD_BREAKOUT, authorized=True)
+    s = Store.create(PAYLOAD_IMG, company=PAYLOAD_SCRIPT, domain="acme-demo.test", auth_ref=PAYLOAD_BREAKOUT, authorized=True,
+                     authorized_by=PAYLOAD_IMG)
     for cat in ("employees", "emails", "documents", "tech", "subdomains", "infrastructure"):
         s.add_finding(cat, f"{PAYLOAD_IMG} {cat}", PAYLOAD_SCRIPT, "search", GOOD_URL, 50, f"{PAYLOAD_BREAKOUT} <b>bold</b>")
         for i, bad in enumerate(BAD_URLS):
             s.add_finding(cat, f"bad url {i} {PAYLOAD_SCRIPT}", PAYLOAD_IMG, "search", bad, 50, PAYLOAD_SCRIPT)
     rid = s.start_run(PAYLOAD_IMG, "search")
     s.finish_run(rid, "error", 0, f"{PAYLOAD_SCRIPT} {PAYLOAD_BREAKOUT}")
+    s.add_event(rid, "error", f"{PAYLOAD_SCRIPT} {PAYLOAD_BREAKOUT} {PAYLOAD_IMG}")
+    s.add_event(rid, "warning", "GET https://ok.example/ -> 503")
+    s.update_meta(auth_ref=PAYLOAD_SCRIPT, authorized_by=PAYLOAD_BREAKOUT)       # history full of hostile values,
+    s.update_meta(auth_ref=PAYLOAD_BREAKOUT, authorized_by=PAYLOAD_SCRIPT)       # ending on the reference the other test reads
+    from shadowcrumbs import log
+    log.logger().error("hostile line %s %s", PAYLOAD_SCRIPT, PAYLOAD_IMG)
     return s
 
 
@@ -149,3 +156,58 @@ def test_hostile_findings_stay_inert_text_in_the_real_dashboard(page, live_app):
     assert page.locator(f"#findings a[href='{GOOD_URL}']").first.get_attribute("rel") == "noopener noreferrer"
     assert page.evaluate("""() => [...document.querySelectorAll('#main a[target=_blank]')].every(a => a.rel.includes('noopener'))""")
     store.delete_files()
+
+
+def test_admin_page_shows_hostile_roe_and_logs_as_inert_text(page, live_app):
+    store = plant_hostile_data()
+    errors, dialogs = [], []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
+
+    page.goto(live_app + "/admin.html", wait_until="networkidle")
+    page.wait_for_selector(".roe-card table")
+    roe = page.locator("#panel").inner_text()
+    assert PAYLOAD_IMG in roe and PAYLOAD_SCRIPT in roe and PAYLOAD_BREAKOUT in roe          # visible, literally
+    assert "UTC" in roe and "granted" in roe and "updated" in roe
+
+    page.get_by_role("button", name="Run events").click()
+    page.wait_for_selector("#logbox div")
+    events = page.locator("#logbox").inner_text()
+    assert PAYLOAD_SCRIPT in events and "[run 1]" in events and "503" in events
+
+    page.get_by_role("button", name="App log").click()
+    page.wait_for_selector("#logbox div")
+    assert PAYLOAD_SCRIPT in page.locator("#logbox").inner_text()
+
+    assert page.evaluate("window.__pwned") is None and dialogs == [] and errors == []
+    assert page.evaluate("""() => document.querySelectorAll(
+        '#main img, #main script, #main iframe, #main object, #main embed, #main svg, #main style, #main b').length""") == 0
+    assert page.evaluate("""() => [...document.querySelectorAll('#main *')]
+        .some(e => [...e.attributes].some(a => a.name.startsWith('on')))""") is False
+    store.delete_files()
+
+
+def test_scope_form_records_the_name_and_the_register_shows_it(page, live_app):
+    from shadowcrumbs.store import Store
+    Store.create("Plain Co", domain="plain.test")
+    page.goto(live_app, wait_until="networkidle")
+    page.wait_for_selector("#auth-ref")
+
+    page.fill("#auth-ref", "SOW 2026-114")
+    page.check("#auth-box")
+    page.click("#head form button[type=submit]")                                    # no name yet
+    page.wait_for_selector("#controls .error")
+    assert "name" in page.locator("#controls .error").inner_text()
+    assert page.locator(".badge.off").count() == 1                                  # refused, still locked
+
+    page.fill("#auth-by", "Pat Tester")
+    page.click("#head form button[type=submit]")
+    page.wait_for_selector(".badge.on")
+    line = page.locator("#roe-line").inner_text()
+    assert "granted by Pat Tester" in line and "UTC" in line
+
+    page.goto(live_app + "/admin.html", wait_until="networkidle")
+    page.wait_for_selector(".roe-card table")
+    row = page.locator(".roe-card tbody tr").first.inner_text()
+    assert "granted" in row and "SOW 2026-114" in row and "Pat Tester" in row and "UTC" in row
+    assert page.evaluate("localStorage.getItem('sc-operator')") == "Pat Tester"      # remembered for next time

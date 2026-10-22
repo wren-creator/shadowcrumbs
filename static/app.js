@@ -60,6 +60,21 @@ async function api(path, opts = {}) {
   return data;
 }
 
+// the name goes with every authorization change, so remember it for next time (storage may be blocked)
+function rememberedName() {
+  try { return localStorage.getItem("sc-operator") || ""; } catch { return ""; }
+}
+function rememberName(name) {
+  try { if (name.trim()) localStorage.setItem("sc-operator", name.trim()); } catch { /* not remembered, still works */ }
+}
+
+// Timestamps are stored and shown in UTC, the same clock as the logs.
+function stamp(utc) {
+  if (!utc) return "time not recorded";
+  const d = new Date(utc.replace(" ", "T") + "Z");
+  return Number.isNaN(d.getTime()) ? utc : `${utc} UTC`;
+}
+
 const active = () => state.engagements.find((e) => e.slug === state.active);
 const totalOf = (e) => Object.values(e.counts || {}).reduce((a, b) => a + b, 0);
 
@@ -113,14 +128,16 @@ function renderHead() {
   const kv = (k, v) => el("div", {}, el("div", { class: "k" }, k), el("div", { class: "v" }, v || "not given"));
   const refInput = el("input", { type: "text", id: "auth-ref", value: e.auth_ref || "", placeholder: "Authorization reference (SOW, ROE, ticket)" });
   const authBox = el("input", { type: "checkbox", id: "auth-box", checked: e.authorized });
+  const byInput = el("input", { type: "text", id: "auth-by", value: rememberedName(), placeholder: "Your name (recorded with the change)", "aria-label": "Your name" });
   const scopeForm = el("form", {
     onsubmit: async (ev) => {
       ev.preventDefault();
       try {
         await api(`/api/engagements/${e.slug}`, {
           method: "PATCH",
-          body: { auth_ref: refInput.value, authorized: authBox.checked },
+          body: { auth_ref: refInput.value, authorized: authBox.checked, authorized_by: byInput.value },
         });
+        rememberName(byInput.value);
         state.notice = null;
         await loadEngagements();
         renderTabs();
@@ -133,6 +150,7 @@ function renderHead() {
     },
   },
     refInput,
+    byInput,
     el("label", { class: "dim" }, authBox, " authorized for active testing"),
     el("button", { class: "btn small", type: "submit" }, "Save scope")
   );
@@ -162,6 +180,9 @@ function renderHead() {
     el("div", { class: "scope", style: "margin-top:14px" },
       el("h3", {}, "Scope"),
       scopeForm,
+      e.last_authorization && el("div", { class: "dim roe-line", id: "roe-line" },
+        `ROE ${e.last_authorization.action} by ${e.last_authorization.recorded_by}, ${stamp(e.last_authorization.recorded_at)}. `,
+        el("a", { href: "admin.html" }, "full history")),
       !e.authorized && el("div", { class: "dim" }, "Search tier works without this. Deep dive sends traffic to the client, so it waits for a reference you can point to later."))
   );
 }
@@ -416,6 +437,7 @@ async function selectEngagement(slug) {
 
 function openNewDialog() {
   $("#new-form").reset();
+  $("#new-form [name=authorized_by]").value = rememberedName();
   $("#new-error").textContent = "";
   $("#new-dlg").showModal();
   $("#new-form [name=name]").focus();
@@ -432,8 +454,10 @@ function wireDialog() {
         body: {
           name: f.get("name"), company: f.get("company"), domain: f.get("domain"),
           ip: f.get("ip"), auth_ref: f.get("auth_ref"), authorized: f.get("authorized") === "on",
+          authorized_by: f.get("authorized_by"),
         },
       });
+      rememberName(f.get("authorized_by") || "");
       $("#new-dlg").close();
       await loadEngagements();
       await selectEngagement(created.slug);
