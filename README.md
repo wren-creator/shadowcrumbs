@@ -30,12 +30,13 @@ To run the whole stack, use the front door. It starts your own SearXNG for you w
 ./shadowcrumbs.sh start               # SearXNG (if it can), then the dashboard
 ./shadowcrumbs.sh start --no-searxng  # dashboard only
 ./shadowcrumbs.sh start --searxng     # insist on SearXNG: stop with an error if it cannot start
+./shadowcrumbs.sh start --searxng-port 8899   # SearXNG on another port (default 8888); --port is the dashboard's
 ./shadowcrumbs.sh status              # dashboard, SearXNG, and whether DuckDuckGo has blocked this machine
 ./shadowcrumbs.sh stop                # dashboard, and SearXNG if this script started it
 ./shadowcrumbs.sh restart
 ```
 
-If Docker is missing or not running, or the SearXNG port is taken, a plain `start` says so and carries on without it. `--demo` and a forced `SHADOWCRUMBS_SEARCH` skip SearXNG, since neither touches the network. The first run downloads the SearXNG image. `start` also takes `--demo`, `--port N`, `--delay SECS` and `--foreground`. A SearXNG that was already running, or one you pointed at with `SHADOWCRUMBS_SEARXNG_URL`, is used but never stopped for you. `start.sh`, `stop.sh` and `tools/searxng.sh` still work on their own.
+If Docker is missing or not running, or the SearXNG port is taken, a plain `start` says so and carries on without it. `--demo` and a forced `SHADOWCRUMBS_SEARCH` skip SearXNG, since neither touches the network. The first run downloads the SearXNG image. `start` also takes `--demo`, `--port N` (the dashboard), `--delay SECS` and `--foreground`. `--searxng-port N` moves SearXNG, and `status` and `stop` follow it, because the port is remembered in `shadowcrumbs.searxng` while that SearXNG is running. If a SearXNG container is already running on the old port, starting on a new one recreates it there. The `SEARXNG_PORT` environment variable still works too, and the switch wins. A SearXNG that was already running, or one you pointed at with `SHADOWCRUMBS_SEARXNG_URL`, is used but never stopped for you. `start.sh`, `stop.sh` and `tools/searxng.sh` still work on their own.
 
 **Keys.** [docs/API-KEYS.md](docs/API-KEYS.md) says what each key unlocks and links to where you get it (Brave and a free GitHub token are the two that matter for a first scan). Copy `env.example` to `.env`, fill in what you have, and run `chmod 600 .env`. Shadowcrumbs loads it at start, so keys stay out of your shell history. A variable already set in your shell wins. A `.env` that other users can read is not loaded, and it says so. `./shadowcrumbs.sh status` shows which of the Brave and GitHub keys are set, names only.
 
