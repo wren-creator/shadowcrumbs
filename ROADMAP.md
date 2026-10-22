@@ -13,7 +13,7 @@ In order. Items marked **needs a key** can wait until there is one, so skip down
 ## Backlog
 
 - [ ] Measure the exposure queries on a domain that really has something exposed (a client, or a lab you set up). toysrus.com (2026-10-22, search tier only, public listings) gave 0 true hits from the new exposure queries, which is expected for a large retail site, so it proves the noise filters but not the hit rate
-- [ ] Check what the Brave plan allows per month: the verify check showed 0 for the monthly count, which may mean no cap or may be a real limit
+- [ ] Show an estimated Brave cost next to a scan (queries times the per-query price, set by the user), so nobody is surprised by a bill. A full scan is about 40 queries, 20 cents at $5 per 1,000
 
 - [ ] Measure the hit rate of the new exposure queries on an authorised domain from the new network, then keep what earns its 8 seconds and drop the rest
 - [ ] Snippet-free extractor for custom sources, so backup and config file searches (`ext:bak`, `ext:sql`) can be added without keeping text that might hold a secret
