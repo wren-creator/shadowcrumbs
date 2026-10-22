@@ -24,6 +24,10 @@ class WaybackUrls(Plugin):
     needs_any = ("domain",)
     order = 35
 
+    def verify(self, http):
+        rows = http.get_json("https://web.archive.org/cdx/search/cdx?url=example.com&output=json&limit=1", timeout=30)
+        return ("ok", "the Internet Archive answered") if rows else ("warn", "the Internet Archive answered with nothing")
+
     def run(self, ctx):
         d = ctx.target["domain"]
         url = (

@@ -161,6 +161,9 @@ class CustomSource(Plugin):
     def needs_text(self):
         return " and ".join(self.needs_any)
 
+    def verify(self, http):
+        return "ok", f"definition is valid, {len(self.defn['queries'])} search(es) go through the search engine checked above"
+
     def applicable(self, target):
         return all(target.get(n) for n in self.defn["needs"])        # every need must be there, not just one
 

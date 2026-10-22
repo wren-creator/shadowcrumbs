@@ -81,6 +81,20 @@ class HibpBreaches(Plugin):
     def unavailable(self):
         return None if os.environ.get("HIBP_API_KEY") else "needs HIBP_API_KEY"
 
+    def verify(self, http):
+        """The subscription status call validates the key without looking up any address."""
+        r = http.get("https://haveibeenpwned.com/api/v3/subscription/status", timeout=10,
+                     headers={"hibp-api-key": os.environ["HIBP_API_KEY"], "user-agent": "Shadowcrumbs"})
+        if r.status_code == 401:
+            return "fail", "HIBP rejected the key (401). Check HIBP_API_KEY."
+        if r.status_code == 429:
+            return "warn", "HIBP rate limited this check (429). The key may be fine, try again in a minute."
+        if r.status_code == 404:
+            return "warn", "HIBP answered 404 to the subscription check, so the key was not validated."
+        r.raise_for_status()
+        plan = (r.json() or {}).get("SubscriptionName")
+        return "ok", "key accepted" + (f", plan: {plan}" if plan else "")
+
     def run(self, ctx):
         d = ctx.target["domain"]
         key = os.environ["HIBP_API_KEY"]
@@ -141,6 +155,9 @@ class DehashedDomain(Plugin):
     def unavailable(self):
         return None if os.environ.get("DEHASHED_API_KEY") else "needs DEHASHED_API_KEY"
 
+    def verify(self, http):
+        return "unchecked", "the key is set, but DeHashed only validates a key on a billable search, so it is not tested here"
+
     def run(self, ctx):
         d = ctx.target["domain"]
         key = os.environ["DEHASHED_API_KEY"]
@@ -188,6 +205,12 @@ class BreachFileImport(Plugin):
         if not Path(path).is_file():
             return f"SHADOWCRUMBS_BREACH_FILE is not a file: {path}"
         return None
+
+    def verify(self, http):
+        path = Path(os.environ["SHADOWCRUMBS_BREACH_FILE"])
+        with path.open("rb") as f:                       # raises if it cannot be read, which is the failure we want
+            f.read(1)
+        return "ok", f"{path.name} is readable, {path.stat().st_size} bytes"
 
     def run(self, ctx):
         d = ctx.target["domain"]

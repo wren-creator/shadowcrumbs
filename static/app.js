@@ -14,6 +14,7 @@ const state = {
   runStatus: { state: "idle" },
   notice: null,
   poll: null,
+  checks: {},          // last verification result per source, from /api/verify
 };
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -228,6 +229,15 @@ function renderControls() {
   );
 }
 
+// the last verification of a source's address and key, if anyone has run one (admin page, Verify)
+function checkLine(name) {
+  const c = state.checks[`source:${name}`];
+  if (!c || c.status === "unchecked") return null;
+  const word = { ok: "ok", fail: "failed", warn: "warning", missing: "not set up" }[c.status] || c.status;
+  return el("div", { class: "last", title: `Verified ${c.checked_at} UTC` },
+    "Check: ", el("span", { class: `vs-${c.status}` }, word), ` ${c.detail}`);
+}
+
 function lastRunFor(name) {
   return state.runs.find((r) => r.plugin === name);
 }
@@ -252,7 +262,8 @@ function renderPlugins() {
           p.custom && el("span", { class: "badge custom", title: `Added from the Sources page by ${p.author}` }, "CUSTOM")),
         el("button", { class: "btn small", disabled: running || locked, onclick: () => startRun([p.name]) }, "Run"),
         el("div", { class: "desc" }, p.description),
-        el("div", { class: "last" }, "Last: ", el("span", { class: last ? `st-${last.status}` : "" }, lastText)));
+        el("div", { class: "last" }, "Last: ", el("span", { class: last ? `st-${last.status}` : "" }, lastText)),
+        checkLine(p.name));
     })),
     Object.keys(state.meta.plugin_load_errors || {}).length > 0 &&
       el("div", { class: "error" }, "Plugin load errors: " +
@@ -493,6 +504,9 @@ async function boot() {
   wireTheme();
   wireDialog();
   state.meta = await api("/api/meta");
+  try {
+    for (const r of (await api("/api/verify")).results) state.checks[r.id] = r;
+  } catch { /* the check line is a nicety, the dashboard works without it */ }
   await loadEngagements();
   renderTabs();
   if (state.engagements.length) await selectEngagement(state.engagements[0].slug);

@@ -113,6 +113,34 @@ def test_deep_template_needs_its_key_and_never_puts_it_in_the_url(plugin_dir, mo
     assert found[0].category == "infrastructure" and found[0].value == "host1.acme-demo.test"
 
 
+def test_scaffolded_deep_source_can_be_verified(plugin_dir, monkeypatch):
+    from shadowcrumbs import verify
+    make(plugin_dir, "vendor_api", "--tier", "deep", "--category", "infrastructure", "--key-env", "VENDOR_API_KEY")
+    path = plugin_dir / "vendor_api.py"
+    path.write_text(path.read_text().replace('URL = ""', 'URL = "https://vendor.test/search"'))
+    load_plugins()
+    p = REGISTRY["vendor_api"]
+
+    class R:
+        def __init__(self, code): self.status_code = code
+        def raise_for_status(self): pass
+
+    class Http:
+        def __init__(self, code): self.code, self.calls = code, []
+        def get(self, url, **kw):
+            self.calls.append((url, kw))
+            return R(self.code)
+    monkeypatch.delenv("VENDOR_API_KEY", raising=False)
+    assert verify.check_source(p, Http(200))["status"] == "missing"                       # no key yet
+    monkeypatch.setenv("VENDOR_API_KEY", "fake-key-for-tests-1")
+    http = Http(200)
+    ok = verify.check_source(p, http)
+    assert ok["status"] == "ok" and ok["detail"] == "endpoint answered, key accepted"
+    assert http.calls[0][1]["params"] == {"q": "example.com"}                              # asks about example.com, not a client
+    assert verify.check_source(p, Http(401))["status"] == "fail"
+    assert "fake-key" not in verify.check_source(p, Http(401))["detail"]
+
+
 @pytest.mark.parametrize("name", ["../evil", "a/b", "Bad", "x", "1abc", "has space", "a" * 60, "", "dns_records"])
 def test_bad_or_taken_names_are_refused_and_nothing_is_written(plugin_dir, name, capsys):
     rc = make(plugin_dir, name, "--category", "tech")

@@ -38,6 +38,21 @@ class __CLASS__(Plugin):
             return f"needs {KEY_ENV}"
         return None
 
+    def verify(self, http):
+        """Optional, but worth having. The Verify page and tools/verify_sources.py call this to check that your
+        endpoint answers and your key is accepted, before anyone starts a scan. Make one cheap request, ask about
+        example.com (never the client), and return (status, detail): ok, warn or fail. Do not put the key in the detail."""
+        headers = {"Accept": "application/json"}
+        if KEY_ENV:
+            headers["X-Api-Key"] = os.environ[KEY_ENV]
+        r = http.get(URL, params={"q": "example.com"}, headers=headers, timeout=10)
+        if r.status_code in (401, 403):
+            return "fail", f"the service rejected the key ({r.status_code}). Check {KEY_ENV or 'the key'}."
+        if r.status_code == 429:
+            return "warn", "rate limited (429). The key may be fine, try again in a minute."
+        r.raise_for_status()
+        return "ok", "endpoint answered" + (", key accepted" if KEY_ENV else "")
+
     def run(self, ctx):
         d = ctx.target.get("domain")
 
