@@ -107,6 +107,39 @@ def search_chain(tier: str) -> list[str]:
     return chain
 
 
+def search_balance() -> bool:
+    """Spread queries across the engines in the chain instead of always asking the first one that is up.
+    Off unless SHADOWCRUMBS_SEARCH_BALANCE is 1, true, yes or on: with a Brave key the strict order is the faster scan."""
+    return os.environ.get("SHADOWCRUMBS_SEARCH_BALANCE", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+# Shares of the traffic when balancing. A weight of 0 keeps an engine in reserve: asked only when every engine with
+# a share is down. DuckDuckGo throttles hard and Exa is a free account with a credit limit, so both start in reserve.
+# Brave leads: it costs about half a cent a query and its answers stay on the site asked for (2026-10-22: 39 of 39
+# results on site, against 4 of 21 through SearXNG from this network), so it is not worth sparing.
+DEFAULT_WEIGHTS = {"brave": 3, "searxng": 2, "ddg": 0, "exa": 0}
+
+
+def search_weight(name: str) -> float:
+    """SHADOWCRUMBS_SEARCH_WEIGHTS="brave=3,searxng=1,ddg=1" changes the shares. A part that is not name=number, or a
+    negative number, is ignored. An engine that is not listed anywhere gets a share of 1."""
+    weights = dict(DEFAULT_WEIGHTS)
+    for part in os.environ.get("SHADOWCRUMBS_SEARCH_WEIGHTS", "").split(","):
+        key, sep, val = part.partition("=")
+        try:
+            if sep and float(val) >= 0:
+                weights[key.strip().lower()] = float(val)
+        except ValueError:
+            continue
+    return weights.get(name, 1.0)
+
+
+def engine_cooldown() -> float:
+    """Seconds a throttled engine sits out before it rejoins the rotation. A refused key or used up credits do not
+    come back during a run, and neither does DuckDuckGo, which has its own longer memory (block_minutes)."""
+    return float(os.environ.get("SHADOWCRUMBS_ENGINE_COOLDOWN", "300"))
+
+
 def search_provider(tier: str) -> str:
     """The engine tried first."""
     return search_chain(tier)[0]

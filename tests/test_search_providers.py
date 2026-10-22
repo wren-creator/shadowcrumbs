@@ -452,3 +452,166 @@ def test_queries_without_a_site_term_and_demo_data_are_left_alone(demo):
     assert len(plain.search("login -site:one.example")) == 2     # only an exclusion
     canned = search.SearchClient(Fixed(urls, name="fixture"), None, delay=0, sleep=lambda s: None)
     assert len(canned.search("site:acme-demo.test")) == 2               # canned demo results are not an engine's answer
+
+
+# balancing ------------------------------------------------------------------------------------------
+
+class Clock:
+    """A clock the test moves by hand, so cooldowns and paces can be checked without waiting."""
+
+    def __init__(self):
+        self.now = 1000.0
+
+    def __call__(self):
+        return self.now
+
+
+class Tagged:
+    """Answers every query and remembers it was asked, so a test can see who took which turn."""
+
+    def __init__(self, name, log, fail=None):
+        self.name, self.log, self.fail = name, log, fail
+
+    def search(self, query, n):
+        self.log.append(self.name)
+        if self.fail:
+            raise self.fail
+        return [search.Result("t", f"https://x.test/{self.name}", "s")]
+
+
+@pytest.fixture
+def balanced(monkeypatch):
+    monkeypatch.setenv("SHADOWCRUMBS_SEARCH_BALANCE", "1")
+    for k in ("SHADOWCRUMBS_SEARCH_WEIGHTS", "SHADOWCRUMBS_ENGINE_COOLDOWN"):
+        monkeypatch.delenv(k, raising=False)
+
+
+def _balanced_client(engines, clock=None):
+    return search.SearchClient(engines, None, delay=0, sleep=lambda s: None, clock=clock or time.monotonic)
+
+
+def test_balancing_is_off_unless_asked_for(monkeypatch):
+    monkeypatch.delenv("SHADOWCRUMBS_SEARCH_BALANCE", raising=False)
+    log = []
+    c = _balanced_client([Tagged("searxng", log), Tagged("brave", log)])
+    for i in range(4):
+        c.search(f"q{i}")
+    assert log == ["searxng"] * 4                           # strict order: the first engine takes everything
+
+
+@pytest.mark.parametrize("value, expected", [("1", True), ("true", True), (" On ", True), ("0", False), ("", False), ("maybe", False)])
+def test_balance_switch_values(monkeypatch, value, expected):
+    monkeypatch.setenv("SHADOWCRUMBS_SEARCH_BALANCE", value)
+    assert config.search_balance() is expected
+
+
+def test_shares_follow_the_weights_and_reserves_wait(balanced):
+    log = []
+    c = _balanced_client([Tagged("searxng", log), Tagged("brave", log), Tagged("ddg", log), Tagged("exa", log)])
+    for i in range(10):
+        c.search(f"q{i}")
+    assert log.count("brave") == 6 and log.count("searxng") == 4          # 3 to 2, exactly, over a full cycle
+    assert "ddg" not in log and "exa" not in log                           # weight 0 means reserve only
+    assert c.by_engine == {"brave": 6, "searxng": 4}
+    assert log[:5] == ["brave", "searxng", "brave", "searxng", "brave"]    # smooth, not six in a row
+
+
+def test_weights_can_be_set_and_bad_parts_are_ignored(balanced, monkeypatch):
+    monkeypatch.setenv("SHADOWCRUMBS_SEARCH_WEIGHTS", "brave=1, searxng=1,ddg=1,exa=nope,junk,brave2=-4,=3")
+    assert [config.search_weight(n) for n in ("brave", "searxng", "ddg", "exa", "unknown")] == [1, 1, 1, 0, 1.0]
+    log = []
+    c = _balanced_client([Tagged("searxng", log), Tagged("brave", log), Tagged("ddg", log)])
+    for i in range(6):
+        c.search(f"q{i}")
+    assert sorted(log) == ["brave"] * 2 + ["ddg"] * 2 + ["searxng"] * 2
+
+
+def test_a_blocked_engine_is_replaced_for_that_query_and_then_skipped(balanced):
+    log = []
+    brave = Tagged("brave", log, fail=search.SearchBlocked("429"))
+    c = _balanced_client([Tagged("searxng", log), brave, Tagged("ddg", log)])
+    out = c.search("q1")                           # brave's turn, it blocks, searxng answers the same query
+    assert [r.url for r in out] == ["https://x.test/searxng"] and log == ["brave", "searxng"]
+    c.search("q2"); c.search("q3"); c.search("q4")
+    assert log.count("brave") == 1                 # asked once, then it sits out
+    assert "ddg" not in log                        # the reserve was never needed
+
+
+def test_a_throttled_engine_comes_back_after_its_cooldown(balanced, monkeypatch):
+    monkeypatch.setenv("SHADOWCRUMBS_ENGINE_COOLDOWN", "120")
+    log, clock = [], Clock()
+    brave = Tagged("brave", log, fail=search.SearchBlocked("429"))
+    c = _balanced_client([Tagged("searxng", log), brave], clock)
+    c.search("q1"); c.search("q2")                 # brave blocks on its turn, searxng covers
+    assert log == ["brave", "searxng", "searxng"]
+    clock.now += 119
+    c.search("q3")
+    assert "brave" not in log[3:]                  # still cooling off
+    brave.fail = None
+    clock.now += 2
+    for i in range(4):
+        c.search(f"later{i}")
+    assert "brave" in log[4:]                      # back in the rotation, and it answered
+
+
+def test_a_permanent_block_does_not_come_back(balanced, monkeypatch):
+    monkeypatch.setenv("SHADOWCRUMBS_ENGINE_COOLDOWN", "1")
+    log, clock = [], Clock()
+    brave = Tagged("brave", log, fail=search.SearchBlocked("401 bad key", permanent=True))
+    c = _balanced_client([Tagged("searxng", log), brave], clock)
+    for i in range(3):
+        c.search(f"q{i}")
+    clock.now += 100000
+    for i in range(4):
+        c.search(f"later{i}")
+    assert log.count("brave") == 1                 # one refusal, then never again this run
+
+
+def test_reserves_take_over_when_every_engine_with_a_share_is_down(balanced):
+    log = []
+    down = search.SearchBlocked("429")
+    c = _balanced_client([Tagged("searxng", log, fail=down), Tagged("brave", log, fail=down), Tagged("ddg", log), Tagged("exa", log)])
+    out = c.search("q1")
+    assert [r.url for r in out] == ["https://x.test/ddg"] and log == ["brave", "searxng", "ddg"]
+    c.search("q2")
+    assert log[3:] == ["ddg"] and c.by_engine == {"ddg": 2}
+
+
+def test_when_everything_is_down_the_run_stops_asking(balanced):
+    log = []
+    down = search.SearchBlocked("429")
+    c = _balanced_client([Tagged("searxng", log, fail=down), Tagged("brave", log, fail=down)])
+    with pytest.raises(search.SearchBlocked):
+        c.search("q1")
+    assert c.blocked
+    with pytest.raises(search.SearchBlocked):
+        c.search("q2")
+    assert log == ["brave", "searxng"]             # nothing more is sent
+
+
+def test_every_engine_keeps_its_own_pace(balanced, monkeypatch):
+    """A quick API must not wait on the slow scraper it takes turns with, and the scraper still gets its full gap."""
+    monkeypatch.delenv("SHADOWCRUMBS_SEARCH_DELAY", raising=False)
+    monkeypatch.setattr(search.random, "uniform", lambda a, b: 1.0)
+    log, waits, clock = [], [], Clock()
+    c = search.SearchClient([Tagged("searxng", log), Tagged("brave", log)], None, sleep=waits.append, clock=clock)
+    for i in range(4):
+        c.search(f"q{i}")
+    # brave, searxng, brave, searxng: only the second brave and second searxng have a gap to honour
+    assert waits == [search.BRAVE_PACE, 8.0]
+
+
+def test_a_single_engine_chain_ignores_balancing(balanced):
+    log = []
+    c = _balanced_client([Tagged("ddg", log)])
+    c.search("q1"); c.search("q2")
+    assert log == ["ddg", "ddg"] and not c.balance          # nothing to balance, and weight 0 must not strand it
+
+
+def test_the_cache_is_shared_whichever_engine_answered(balanced, demo):
+    """Keyed by query only on purpose: a cached answer is an answer, and a re-run must cost nothing on any engine."""
+    log = []
+    first = search.SearchClient([Tagged("searxng", log), Tagged("brave", log)], demo, delay=0, sleep=lambda s: None)
+    first.search("q1")
+    second = search.SearchClient([Tagged("brave", log), Tagged("searxng", log)], demo, delay=0, sleep=lambda s: None)
+    assert len(second.search("q1")) == 1 and log == ["brave"] and second.cached_queries == 1
