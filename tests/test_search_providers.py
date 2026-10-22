@@ -63,8 +63,13 @@ def test_provider_selection(monkeypatch):
     assert search.make_provider("search").name == "ddg"
     assert search.make_provider("deep").name == "ddg"
     monkeypatch.setenv("BRAVE_API_KEY", "k")
-    assert search.make_provider("search").name == "ddg"   # search tier stays on the engine
-    assert search.make_provider("deep").name == "brave"   # deep dive upgrades to the API
+    assert search.make_provider("search").name == "brave"   # a key means the API leads on both tiers
+    assert search.make_provider("deep").name == "brave"
+    assert [p.name for p in search.make_chain("search")] == ["brave", "ddg"]
+    monkeypatch.setenv("SHADOWCRUMBS_SEARXNG_URL", "http://127.0.0.1:8888")
+    assert [p.name for p in search.make_chain("deep")] == ["brave", "searxng", "ddg"]
+    monkeypatch.setenv("SHADOWCRUMBS_SEARCH", "fixture")
+    assert config.search_chain("search") == ["fixture"]    # forcing one turns the fallback off
 
 
 class Blocking:
@@ -220,3 +225,53 @@ def test_searxng_retry_can_succeed_and_a_true_empty_is_not_retried(monkeypatch):
     calls = []
     monkeypatch.setattr(search.requests, "get", lambda *a, **k: calls.append(1) or JsonResp({"results": []}))
     assert search.SearXNG("http://x").search("q", 5) == [] and len(calls) == 1
+
+
+# the fallback chain ------------------------------------------------------------------------------
+
+def test_a_throttled_engine_hands_over_to_the_next_and_stays_out_for_the_run():
+    brave, searx = Blocking(name="brave"), Blocking(name="searxng", ok=99)
+    c = _client([brave, searx])
+    assert len(c.search("q1")) == 1 and len(c.search("q2")) == 1
+    assert brave.calls == 1 and searx.calls == 2         # brave was not asked again once it blocked
+    assert not c.blocked and c.provider.name == "searxng"
+    assert not config.block_marker().exists()            # nothing about DuckDuckGo was learned
+
+
+def test_the_run_ends_only_when_every_engine_has_blocked():
+    brave, ddg = Blocking(name="brave"), Blocking(name="ddg")
+    c = _client([brave, ddg])
+    with pytest.raises(search.SearchBlocked):
+        c.search("q1")
+    assert c.blocked and config.block_marker().exists()  # the DuckDuckGo block is remembered
+    with pytest.raises(search.SearchBlocked):
+        c.search("q2")
+    assert brave.calls == 1 and ddg.calls == 1
+
+
+def test_duckduckgo_as_a_fallback_still_respects_an_earlier_block():
+    config.block_marker().parent.mkdir(parents=True, exist_ok=True)
+    config.block_marker().write_text(json.dumps({"at": time.time()}))
+    brave, ddg = Blocking(name="brave"), Blocking(name="ddg", ok=99)
+    with pytest.raises(search.SearchBlocked, match="blocked this IP"):
+        _client([brave, ddg]).search("q")
+    assert ddg.calls == 0                                 # not one request went to DuckDuckGo
+    stamp = json.loads(config.block_marker().read_text())["at"]
+    assert time.time() - stamp < 5                         # and the quiet period was not restarted
+
+
+def test_brave_rejecting_the_key_is_a_block_so_the_chain_carries_on(monkeypatch):
+    monkeypatch.setenv("BRAVE_API_KEY", "k")
+    monkeypatch.setattr(search.requests, "get", lambda *a, **k: Resp("", 401))
+    with pytest.raises(search.SearchBlocked, match="BRAVE_API_KEY"):
+        search.Brave().search("q", 5)
+
+
+def test_brave_gets_a_short_pace_unless_you_set_one(monkeypatch):
+    monkeypatch.delenv("SHADOWCRUMBS_SEARCH_DELAY", raising=False)
+    waits = []
+    c = search.SearchClient([search.Brave.__new__(search.Brave), Blocking(name="ddg", ok=9)], None, sleep=waits.append)
+    assert c._delay_for(c.chain[0]) == search.BRAVE_PACE and c._delay_for(c.chain[1]) == 8
+    monkeypatch.setenv("SHADOWCRUMBS_SEARCH_DELAY", "5")
+    c = search.SearchClient([search.Brave.__new__(search.Brave)], None, sleep=waits.append)
+    assert c._delay_for(c.chain[0]) == 5                   # your setting wins

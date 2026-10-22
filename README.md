@@ -35,6 +35,10 @@ To run the whole stack with your own SearXNG in one go (needs Docker running), u
 
 `start` also takes `--demo`, `--port N`, `--delay SECS` and `--foreground`. A SearXNG that was already running, or one you pointed at with `SHADOWCRUMBS_SEARXNG_URL`, is used but never stopped for you. `start.sh`, `stop.sh` and `tools/searxng.sh` still work on their own.
 
+**Keys.** Copy `env.example` to `.env`, fill in what you have, and run `chmod 600 .env`. Shadowcrumbs loads it at start, so keys stay out of your shell history. A variable already set in your shell wins. A `.env` that other users can read is not loaded, and it says so. `./shadowcrumbs.sh status` shows which of the Brave and GitHub keys are set, names only.
+
+**Search engines and fallback.** The search tier tries, in order: Brave (when `BRAVE_API_KEY` is set), your own SearXNG (when `SHADOWCRUMBS_SEARXNG_URL` is set), then DuckDuckGo. If one is throttled, the run moves on to the next instead of stopping, and an engine that blocked you is not asked again until the next run. Brave is paced at about a query a second unless you set `SHADOWCRUMBS_SEARCH_DELAY`. DuckDuckGo keeps its long pace and its one hour quiet period. `SHADOWCRUMBS_SEARCH=name` forces a single engine and turns the fallback off.
+
 Switches for `start.sh`: `--demo`, `--port N`, `--delay SECS` (pause between live search queries), `--foreground` (stay in the terminal, Ctrl-C to stop), `--status`, `--help`. It builds `.venv` on first run if one isn't there. Logs go to `shadowcrumbs.log`.
 
 Click the **SHADOWCRUMBS** logo in the header to flip between the green screen and a rose theme. It remembers your pick.

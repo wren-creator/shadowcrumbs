@@ -7,7 +7,7 @@ from . import config
 from .log import logger, redact
 from .netclient import HttpClient
 from .plugin import REGISTRY, Context
-from .search import SearchClient, make_provider
+from .search import SearchClient, make_chain
 from .store import Store, now
 
 STATE: dict = {}
@@ -40,7 +40,7 @@ def execute(slug, tier, names=None, progress=None):
     plugins = select(tier, names)
     meta = store.meta()
     target = {k: meta[k] for k in ("company", "domain", "ip")}
-    search = SearchClient(make_provider(tier), store)
+    search = SearchClient(make_chain(tier), store)
     ctx = Context(target=target, search=search, http=HttpClient(), store=store)
     app_log = logger()
     levels = {"debug": 10, "info": 20, "warning": 30, "error": 40}
@@ -61,7 +61,7 @@ def execute(slug, tier, names=None, progress=None):
         run_id = store.start_run(p.name, p.tier)
         emit = ctx.log = search.log = ctx.http.log = emitter(run_id)
         if first:
-            emit(f"{tier} tier started: {len(plugins)} source(s), search provider {search.provider.name}, "
+            emit(f"{tier} tier started: {len(plugins)} source(s), search engines {' > '.join(p.name for p in search.chain)}, "
                  f"target {', '.join(f'{k}={v}' for k, v in target.items() if v)}")
             first = False
         emit(f"{p.name} started")

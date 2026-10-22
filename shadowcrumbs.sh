@@ -86,6 +86,16 @@ cmd_status() {
     else
         echo "SearXNG: not running"
     fi
+    .venv/bin/python -I - "$DIR" <<'PY' 2>/dev/null || true
+import sys
+sys.path.insert(0, sys.argv[1])
+import os
+from shadowcrumbs import config
+_, problem = config.load_env_file()
+print("Keys: " + ", ".join(f"{k} {'set' if os.environ.get(k) else 'not set'}" for k in config.KEY_NAMES[:2]))
+if problem:
+    print("Keys: WARNING " + problem)
+PY
     if [ -f "$DATA/search_blocked.json" ]; then
         .venv/bin/python -I - "$DATA/search_blocked.json" <<'PY' 2>/dev/null || echo "DuckDuckGo: a block marker exists"
 import json, sys, time

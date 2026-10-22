@@ -88,6 +88,9 @@ def check_provider(tier, http):
             status, detail = "fail", f"unknown search provider {name!r}"
     except Exception as e:
         status, detail = "fail", f"{type(e).__name__}: {e}"
+    rest = config.search_chain(tier)[1:]
+    if rest and status in ("ok", "warn"):
+        detail += f". If it is throttled, searches move on to: {', '.join(rest)}."
     return _result(cid, label, tier, status, detail, began, cost)
 
 
