@@ -140,6 +140,15 @@ class HibpBreaches(Plugin):
         return breaches
 
 
+def _dehashed_error(r, lead):
+    """DeHashed puts the reason in the body, e.g. no search subscription vs not enough credits, so pass it on."""
+    try:
+        why = str((r.json() or {}).get("error") or "").strip()
+    except (ValueError, AttributeError):
+        why = ""
+    return f"{lead} ({r.status_code})" + (f": {clip(why, 200)}" if why else ". Check DEHASHED_API_KEY, the search subscription and credits.")
+
+
 @register
 class DehashedDomain(Plugin):
     name = "dehashed_domain"
@@ -156,7 +165,22 @@ class DehashedDomain(Plugin):
         return None if os.environ.get("DEHASHED_API_KEY") else "needs DEHASHED_API_KEY"
 
     def verify(self, http):
-        return "unchecked", "the key is set, but DeHashed only validates a key on a billable search, so it is not tested here"
+        """The account info call is free and says whether the key works, whether the account has search access
+        (a subscription, separate from credits) and how many search credits are left."""
+        r = http.get("https://api.dehashed.com/v2/info/user", timeout=10,
+                     headers={"Dehashed-Api-Key": os.environ["DEHASHED_API_KEY"]})
+        if r.status_code in (400, 401, 403):
+            return "fail", _dehashed_error(r, "DeHashed rejected the key")
+        if r.status_code == 429:
+            return "warn", "DeHashed rate limited this check (429). The key may be fine, try again in a minute."
+        r.raise_for_status()
+        info = r.json() or {}
+        credits = info.get("search_credits", 0)
+        if not info.get("search_access"):
+            return "fail", f"key accepted, but the account has no search access (needs a search subscription, credits alone are not enough). Search credits: {credits}"
+        if not credits:
+            return "warn", "key accepted and search access is on, but there are 0 search credits left"
+        return "ok", f"key accepted, search access on, {credits} search credits (1 per search)"
 
     def run(self, ctx):
         d = ctx.target["domain"]
@@ -170,8 +194,8 @@ class DehashedDomain(Plugin):
                     headers={"Dehashed-Api-Key": key, "Content-Type": "application/json"},
                     json={"query": f"domain:{d}", "page": page, "size": self.PAGE},
                 )
-                if r.status_code in (401, 403):
-                    raise RuntimeError(f"DeHashed rejected the key ({r.status_code}). Check DEHASHED_API_KEY and credits.")
+                if r.status_code in (400, 401, 403):
+                    raise RuntimeError(_dehashed_error(r, "DeHashed refused the search"))
                 if r.status_code == 429:
                     raise RuntimeError("DeHashed rate limit hit, stopping. Try again in a few minutes.")
                 r.raise_for_status()

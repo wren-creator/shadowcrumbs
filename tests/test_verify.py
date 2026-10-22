@@ -142,11 +142,25 @@ def test_public_sources_rdap_crtsh_wayback_and_dns(monkeypatch):
     REGISTRY.pop("wayback_urls", None)
 
 
-def test_dehashed_key_is_not_tested_because_the_only_test_is_a_billable_search(monkeypatch):
+def test_dehashed_key_states(monkeypatch):
     monkeypatch.setenv("DEHASHED_API_KEY", KEY)
-    http = FakeHttp()
+    route = "v2/info/user"
+    ok = check("dehashed_domain", FakeHttp({route: Resp(200, {"search_access": True, "search_credits": 500})}))
+    assert ok["status"] == "ok" and "500" in ok["detail"]
+    nosub = check("dehashed_domain", FakeHttp({route: Resp(200, {"search_access": False, "search_credits": 500})}))
+    assert nosub["status"] == "fail" and "subscription" in nosub["detail"]
+    assert check("dehashed_domain", FakeHttp({route: Resp(200, {"search_access": True, "search_credits": 0})}))["status"] == "warn"
+    bad = check("dehashed_domain", FakeHttp({route: Resp(401, {"error": "issue with authentication"})}))
+    assert bad["status"] == "fail" and "issue with authentication" in bad["detail"]
+    assert check("dehashed_domain", FakeHttp({route: Resp(429)}))["status"] == "warn"
+
+
+def test_dehashed_check_is_a_get_with_the_key_in_a_header_and_never_a_search(monkeypatch):
+    monkeypatch.setenv("DEHASHED_API_KEY", KEY)
+    http = FakeHttp({"v2/info/user": Resp(200, {"search_access": True, "search_credits": 1})})
     r = check("dehashed_domain", http)
-    assert r["status"] == "unchecked" and "billable" in r["detail"] and http.calls == []
+    assert [(m, u.split("/v2/")[1]) for m, u, _ in http.calls] == [("GET", "info/user")]
+    assert http.calls[0][2]["headers"]["Dehashed-Api-Key"] == KEY and KEY not in json.dumps(r)
 
 
 def test_breach_file_is_checked_for_existence_and_readability(tmp_path, monkeypatch):

@@ -156,6 +156,21 @@ function renderHead() {
     el("button", { class: "btn small", type: "submit" }, "Save scope")
   );
 
+  const scopeNames = (e.scope_domains || []).map((d) => d.domain);
+  const subInput = el("input", { type: "text", id: "sub-add", placeholder: e.domain ? `Subdomain of ${e.domain}` : "Needs a main domain", disabled: !e.domain, "aria-label": "Subdomain to add" });
+  const scopeList = el("div", { class: "scope-domains", id: "scope-domains" },
+    el("h3", {}, "Subdomains in scope"),
+    scopeNames.length
+      ? el("ul", {}, ...e.scope_domains.map((d) => el("li", {},
+          el("span", { class: "val" }, d.domain),
+          el("span", { class: "dim" }, ` added by ${d.added_by}, ${stamp(d.added_at)}`),
+          el("button", { class: "btn small", disabled: state.runStatus.state === "running" || (state.tier === "deep" && !e.authorized),
+            title: `Run the ${state.tier} sources against ${d.domain} only`, onclick: () => startRun(null, [d.domain]) }, "Scan"),
+          el("button", { class: "btn small danger", title: "Take out of scope", onclick: () => removeScopeDomain(d.domain) }, "Remove"))))
+      : el("div", { class: "dim" }, "None yet. Add one here, or use Add to scope on a subdomain finding."),
+    el("form", { onsubmit: async (ev) => { ev.preventDefault(); if (await addScopeDomain(subInput.value)) subInput.value = ""; } },
+      subInput, el("button", { class: "btn small", type: "submit", disabled: !e.domain }, "Add to scope")));
+
   host.replaceChildren(
     el("div", { class: "controls" },
       el("h2", {}, e.name),
@@ -184,6 +199,7 @@ function renderHead() {
       e.last_authorization && el("div", { class: "dim roe-line", id: "roe-line" },
         `ROE ${e.last_authorization.action} by ${e.last_authorization.recorded_by}, ${stamp(e.last_authorization.recorded_at)}. `,
         el("a", { href: "admin.html" }, "full history")),
+      scopeList,
       !e.authorized && el("div", { class: "dim" }, "Search tier works without this. Deep dive sends traffic to the client, so it waits for a reference you can point to later."))
   );
 }
@@ -221,6 +237,11 @@ function renderControls() {
         class: "btn primary", disabled: running || locked,
         onclick: () => startRun(null),
       }, state.tier === "deep" ? "Run all deep dive sources" : "Run all search sources"),
+      (e.scope_domains || []).length > 0 && el("button", {
+        class: "btn", disabled: running || locked,
+        title: "Run every source against the main domain and each subdomain in scope",
+        onclick: () => startRun(null, [e.domain, ...e.scope_domains.map((d) => d.domain)]),
+      }, `Run all, plus ${e.scope_domains.length} subdomain${e.scope_domains.length === 1 ? "" : "s"}`),
       el("span", { class: "spacer" }),
       exportLink("md", "Export MD"), exportLink("pdf", "Export PDF"), exportLink("json", "Export JSON")),
     el("div", { class: statusClass, role: "status" }, statusText),
@@ -339,6 +360,7 @@ function findingRow(f) {
             renderFindings();
           },
         }), " ok "),
+      f.category === "subdomains" && scopeButton(f.value),
       el("button", {
         class: "btn small danger", title: "Remove this finding",
         onclick: async () => {
@@ -348,6 +370,19 @@ function findingRow(f) {
           loadEngagements().then(renderTabs);
         },
       }, "Drop")));
+}
+
+// a subdomain finding can be pulled into scope so the sources run against it too
+function scopeButton(host) {
+  const e = active();
+  const inScope = (e.scope_domains || []).some((d) => d.domain === host);
+  const isMain = host === e.domain;
+  const under = e.domain && host.endsWith("." + e.domain);
+  if (isMain || (!inScope && !under)) return null;
+  return el("button", {
+    class: "btn small", disabled: inScope, title: inScope ? "Already in scope" : `Add ${host} to scope so it can be scanned`,
+    onclick: () => addScopeDomain(host),
+  }, inScope ? "In scope" : "Add to scope");
 }
 
 function renderRuns() {
@@ -374,11 +409,45 @@ function setTier(tier) {
   renderPlugins();
 }
 
-async function startRun(names) {
+async function addScopeDomain(domain) {
+  let by = rememberedName();
+  if (!by) by = (prompt("Your name, recorded with the scope change:") || "").trim();
+  try {
+    await api(`/api/engagements/${state.active}/scope-domains`, { method: "POST", body: { domain, added_by: by } });
+    rememberName(by);
+    state.notice = null;
+    await loadEngagements();
+    renderHead();
+    renderControls();
+    renderFindings();
+    return true;
+  } catch (err) {
+    state.notice = { kind: "error", text: err.message };
+    renderControls();
+    return false;
+  }
+}
+
+async function removeScopeDomain(domain) {
+  if (!confirm(`Take ${domain} out of scope? Its findings stay.`)) return;
+  try {
+    await api(`/api/engagements/${state.active}/scope-domains/${encodeURIComponent(domain)}?removed_by=${encodeURIComponent(rememberedName())}`, { method: "DELETE" });
+    state.notice = null;
+    await loadEngagements();
+    renderHead();
+    renderControls();
+    renderFindings();
+  } catch (err) {
+    state.notice = { kind: "error", text: err.message };
+    renderControls();
+  }
+}
+
+async function startRun(names, domains) {
   state.notice = null;
   try {
     state.runStatus = await api(`/api/engagements/${state.active}/runs`, {
-      method: "POST", body: { tier: state.tier, plugins: names },
+      method: "POST", body: { tier: state.tier, plugins: names, domains: domains || null },
     });
     startPolling();
   } catch (err) {

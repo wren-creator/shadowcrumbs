@@ -33,12 +33,29 @@ def _check_gate(store, tier):
         )
 
 
-def execute(slug, tier, names=None, progress=None):
-    """Run the selected plugins one after another. Returns a summary dict."""
+def resolve_domains(meta, domains=None):
+    """The domains a run covers. None means the engagement's own domain. Anything else must be that domain or one
+    of the subdomains pulled into scope: a run never goes to a host the operator did not put in scope."""
+    allowed = [meta["domain"], *(d["domain"] for d in meta["scope_domains"])]
+    if not domains:
+        return [meta["domain"]]
+    out = []
+    for d in domains:
+        d = (d or "").strip().lower()
+        if d not in allowed:
+            raise ValueError(f"{d!r} is not in scope for this engagement")
+        if d not in out:
+            out.append(d)
+    return out
+
+
+def execute(slug, tier, names=None, progress=None, domains=None):
+    """Run the selected plugins one after another, once per domain in play. Returns a summary dict."""
     store = Store(slug)
     _check_gate(store, tier)
     plugins = select(tier, names)
     meta = store.meta()
+    domains = resolve_domains(meta, domains)
     target = {k: meta[k] for k in ("company", "domain", "ip")}
     search = SearchClient(make_chain(tier), store)
     ctx = Context(target=target, search=search, http=HttpClient(), store=store)
@@ -55,16 +72,19 @@ def execute(slug, tier, names=None, progress=None):
 
     summary = {"tier": tier, "plugins": [], "new_findings": 0}
     first = True
-    for i, p in enumerate(plugins):
+    jobs = [(d, p) for d in domains for p in plugins]
+    for i, (d, p) in enumerate(jobs):
+        target = ctx.target = {**target, "domain": d}
+        label = p.name if d == meta["domain"] else f"{p.name} @ {d}"     # keeps a subdomain run from hiding the main one in the history
         if progress:
-            progress(current=p.name, done=i, total=len(plugins))
-        run_id = store.start_run(p.name, p.tier)
+            progress(current=label, done=i, total=len(jobs))
+        run_id = store.start_run(label, p.tier)
         emit = ctx.log = search.log = ctx.http.log = emitter(run_id)
         if first:
-            emit(f"{tier} tier started: {len(plugins)} source(s), search engines {' > '.join(p.name for p in search.chain)}, "
-                 f"target {', '.join(f'{k}={v}' for k, v in target.items() if v)}")
+            emit(f"{tier} tier started: {len(plugins)} source(s) x {len(domains)} domain(s), search engines "
+                 f"{' > '.join(p.name for p in search.chain)}, target {', '.join(f'{k}={v}' for k, v in target.items() if v)}")
             first = False
-        emit(f"{p.name} started")
+        emit(f"{label} started")
         began = time.monotonic()
         found, status, err, trace = 0, "ok", None, ""
         if not p.applicable(target):
@@ -81,12 +101,12 @@ def execute(slug, tier, names=None, progress=None):
                 trace = "\n" + traceback.format_exc(limit=8)
         err = redact(err) if err else err
         store.finish_run(run_id, status, found, err)
-        emit(f"{p.name} finished: {status}, {found} new, {time.monotonic() - began:.1f}s" + (f" | {err}" if err else "") + trace,
+        emit(f"{label} finished: {status}, {found} new, {time.monotonic() - began:.1f}s" + (f" | {err}" if err else "") + trace,
              "warning" if status in ("skipped", "partial") else "error" if status == "error" else "info")
-        summary["plugins"].append({"name": p.name, "status": status, "found": found, "error": err})
+        summary["plugins"].append({"name": label, "status": status, "found": found, "error": err})
         summary["new_findings"] += found
     if progress:
-        progress(current=None, done=len(plugins), total=len(plugins))
+        progress(current=None, done=len(jobs), total=len(jobs))
     summary["searches_live"] = search.live_queries
     summary["searches_cached"] = search.cached_queries
     summary["search_blocked"] = search.blocked
@@ -96,17 +116,18 @@ def execute(slug, tier, names=None, progress=None):
     return summary
 
 
-def start(slug, tier, names=None):
+def start(slug, tier, names=None, domains=None):
     """Kick off a run in the background. One run per engagement at a time."""
     store = Store(slug)
     _check_gate(store, tier)
     plugins = select(tier, names)
+    domains = resolve_domains(store.meta(), domains)
     with LOCK:
         cur = STATE.get(slug)
         if cur and cur["state"] == "running":
             raise RuntimeError("a run is already in progress for this engagement")
         STATE[slug] = {
-            "state": "running", "tier": tier, "total": len(plugins), "done": 0,
+            "state": "running", "tier": tier, "total": len(plugins) * len(domains), "done": 0,
             "current": None, "started_at": now(), "summary": None, "error": None,
         }
 
@@ -116,7 +137,7 @@ def start(slug, tier, names=None):
 
     def worker():
         try:
-            summary = execute(slug, tier, names, progress)
+            summary = execute(slug, tier, names, progress, domains)
             with LOCK:
                 STATE[slug].update(state="idle", summary=summary, current=None)
         except Exception as e:

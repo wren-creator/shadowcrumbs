@@ -7,6 +7,7 @@ import zipfile
 
 import dns.exception
 import dns.resolver
+import requests
 from defusedxml import ElementTree as ET
 
 from .. import config
@@ -108,10 +109,27 @@ class Rdap(Plugin):
         data = http.get_json("https://rdap.org/domain/example.com", timeout=15)
         return ("ok", "RDAP answered for example.com") if data else ("warn", "RDAP answered, but with nothing for example.com")
 
+    @staticmethod
+    def _domain_record(http, d):
+        """RDAP only knows registered domains. A target like scanme.nmap.org gets a 400 or 404, so drop the
+        leftmost label and retry until something answers or only two labels are left."""
+        labels = d.split(".")
+        while True:
+            name = ".".join(labels)
+            try:
+                data = http.get_json(f"https://rdap.org/domain/{name}")
+            except requests.HTTPError as e:
+                if e.response is None or e.response.status_code != 400:
+                    raise
+                data = None
+            if data or len(labels) <= 2:
+                return name, data
+            labels = labels[1:]
+
     def run(self, ctx):
         d, ip = ctx.target.get("domain"), first_ip(ctx.target.get("ip"))
         if d:
-            data = ctx.http.get_json(f"https://rdap.org/domain/{d}")
+            d, data = self._domain_record(ctx.http, d)
             if data:
                 for ent in data.get("entities", []):
                     if "registrar" in ent.get("roles", []):

@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 from . import config
 from .log import logger, redact
-from .util import normalize_domain, normalize_ip
+from .util import in_domain, normalize_domain, normalize_ip
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -41,6 +41,11 @@ CREATE TABLE IF NOT EXISTS authorizations (
   auth_ref TEXT NOT NULL DEFAULT '',
   recorded_by TEXT NOT NULL,
   recorded_at TEXT
+);
+CREATE TABLE IF NOT EXISTS scope_domains (
+  domain TEXT PRIMARY KEY,
+  added_by TEXT NOT NULL,
+  added_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS run_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -195,6 +200,7 @@ class Store:
             "notes": m.get("notes", ""),
             "created_at": m.get("created_at"),
             "last_authorization": self.authorizations(last=True),
+            "scope_domains": self.scope_domains(),
         }
 
     def update_meta(self, authorized=None, auth_ref=None, notes=None, authorized_by=None, require_name=False):
@@ -226,6 +232,42 @@ class Store:
         with self.conn() as c:
             rows = [dict(r) for r in c.execute("SELECT * FROM authorizations ORDER BY id")]
         return (rows[-1] if rows else None) if last else rows
+
+    def scope_domains(self):
+        """Subdomains the operator pulled into scope, oldest first. Each is a host under the engagement's own domain."""
+        with self.conn() as c:
+            return [dict(r) for r in c.execute("SELECT domain, added_by, added_at FROM scope_domains ORDER BY added_at, domain")]
+
+    def add_scope_domain(self, domain, added_by):
+        """Pull a subdomain of the engagement's domain into scope so it can be scanned too. Adding one twice is a no-op."""
+        primary = self.meta()["domain"]
+        if not primary:
+            raise ValueError("this engagement has no domain, so there is nothing to add a subdomain of")
+        domain = normalize_domain(domain)
+        if not domain:
+            raise ValueError("give the subdomain to add")
+        if domain == primary:
+            raise ValueError(f"{domain} is already the engagement's main domain")
+        if not in_domain(domain, primary):
+            raise ValueError(f"{domain} is not under {primary}. Only subdomains of the engagement's domain can be added.")
+        by = clean_person(added_by)
+        if not by:
+            raise ValueError("the name of the person adding this to scope is required")
+        with self.conn() as c:
+            cur = c.execute("INSERT OR IGNORE INTO scope_domains(domain, added_by, added_at) VALUES (?, ?, ?)",
+                            (domain, by, now()))
+            added = cur.rowcount > 0
+        if added:
+            logger().getChild("audit").info("scope add: engagement=%s domain=%s by=%r", self.slug, domain, by)
+        return domain
+
+    def remove_scope_domain(self, domain, removed_by=None):
+        with self.conn() as c:
+            cur = c.execute("DELETE FROM scope_domains WHERE domain=?", ((domain or "").strip().lower(),))
+            if cur.rowcount == 0:
+                raise KeyError(domain)
+        logger().getChild("audit").info("scope remove: engagement=%s domain=%s by=%r", self.slug, domain,
+                                        clean_person(removed_by) or UNSPECIFIED)
 
     def counts(self):
         with self.conn() as c:

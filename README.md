@@ -75,6 +75,8 @@ Deep dive is locked until the engagement has an authorization reference (SOW num
 
 **Who recorded it, and when.** Every change to the authorization (granted, updated, revoked) adds a row to that engagement's ROE history: the reference, the name of the person who recorded it, and the date and time in UTC. The dashboard asks for your name whenever you change the authorization, and remembers it in your browser. The API refuses a change without one (`authorized_by`). Rows are append only: nothing in the app edits or deletes one. Be straight about what that is worth: it is a log kept in a SQLite file on your machine, so anyone who can write to the file can change it, and it goes away with the engagement. So every change is also written to the app log, and deleting an engagement writes its whole ROE history there first. Databases made before this existed get one row marked "unknown (recorded before the audit trail)" with no time, because nobody recorded one.
 
+**Subdomains in scope.** The main domain is not always the whole job. Under Scope, add a subdomain of the engagement's domain (or click **Add to scope** on any row in the Subdomains tab) and it joins the engagement with your name and the time. Each one gets a **Scan** button, and **Run all, plus N subdomains** runs every source against the main domain and then each subdomain in turn. Runs for a subdomain show up in the history as `source @ host`, so they never bury the main domain's last run. Only hosts under the engagement's own domain can be added, and the API refuses to run against anything not in scope (`domains` on the run request). Adds and removals are written to the app log, and the list prints on every export. Deep dive still waits for the authorization reference, subdomains or not.
+
 ## The admin panel
 
 **ADMIN** in the dashboard header (or `http://127.0.0.1:8470/admin.html`) opens a page with three sections.
@@ -183,7 +185,7 @@ It exits 1 when a check fails, so it also works as a preflight before an engagem
 | **FAILED** | Unreachable, or the key was rejected. The detail says which |
 | **WARNING** | It works, but look: crt.sh is overloaded, a SearXNG engine is down, or your GitHub token can see private repos |
 | **NOT SET UP** | A key or file the source needs is not configured, with the variable to set. Not a failure |
-| **NOT CHECKED** | There is no safe check. DeHashed (the only test of a key is a billable search) and the sources that only talk to the client's own systems |
+| **NOT CHECKED** | There is no safe check, which is the sources that only talk to the client's own systems |
 
 What it sends, so there are no surprises. Every request asks a service about `example.com`, never your client, and keys travel in request headers only, as in a real run. The search engine for each tier is checked too. DuckDuckGo is **never** queried live, because a test query is exactly what trips its throttle: you get the recorded block state instead. A Brave check uses one search from your quota, and the page says so. SearXNG gets one query through your own instance and reports any upstream engines that are not answering. The GitHub check uses the free rate limit call, so it costs nothing, and it warns if the token has the `repo` scope.
 
