@@ -5,6 +5,7 @@
 In order. Items marked **needs a key** can wait until there is one, so skip down the list.
 
 - [ ] Re-measure DuckDuckGo from a different network (2026-10-09: from this IP one query works and the next, a minute or two later, is blocked, same pattern as before. A browser on the same network gets results from html.duckduckgo.com, so the IP is not banned and the script is what gets flagged). One check query, then `tools/measure_ddg.py --paces 10,5,2.5 --per-pace 20`. If a fresh IP takes the slow paces, the 8 second default is right. If not, make a Brave key the recommended route
+- [ ] Look on GitHub for how SearXNG gets around the DuckDuckGo throttling (tip from Kev Milne, who says it is the secret to the DDG issue). Check the searxng/searxng repo's DuckDuckGo engine and its request headers, pacing and retry handling, then see what we can apply to our own DDG provider or to `tools/searxng.sh`
 - [ ] hunter.io plugin: emails and the address pattern for the domain (**needs a key**, small free tier)
 - [ ] Shared helper for the internet scanners, then short plugins on top: Shodan, Censys, Netlas, ONYPHE, BinaryEdge, ZoomEye, FOFA, FullHunt, LeakIX (**each needs a key**)
 - [ ] Live-verify the HIBP and DeHashed plugins, they were built from the vendors' docs and fake responses (**needs keys**; DeHashed key and 500 credits confirmed live on 2026-10-22, one real domain search still to run). The new Verify page exercises the HIBP key check, so run it with a key and report what it says
