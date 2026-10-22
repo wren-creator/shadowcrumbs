@@ -12,6 +12,9 @@ In order. Items marked **needs a key** can wait until there is one, so skip down
 
 ## Backlog
 
+- [ ] Measure the hit rate of the new exposure queries on an authorised domain from the new network, then keep what earns its 8 seconds and drop the rest
+- [ ] Snippet-free extractor for custom sources, so backup and config file searches (`ext:bak`, `ext:sql`) can be added without keeping text that might hold a secret
+
 - [ ] Vulners plugin: turn product and version strings from the tech findings into known CVEs
 - [ ] IntelX credential source, following the no-password rule
 - [ ] PublicWWW plugin for tech and shared tracking IDs (paid API)
@@ -44,3 +47,4 @@ The full list of candidate sources, and where each one fits, is in [docs/DATA-SO
 - [x] Sources page (2026-10-21): the team adds search data points from the dashboard with no code, hot reloaded, shareable by export or one shared file, with a revision lock. Data only, so it cannot run code or reach a client
 - [x] Verify step (2026-10-21): checks each source's endpoint and key plus the search engines, on the admin page and with `tools/verify_sources.py`. Asks about example.com only, never queries DuckDuckGo live, keys scrubbed. Public services checked live; HIBP and DeHashed still need a real key
 - [x] SearXNG suspended-engine handling (2026-10-21, idea from Kev Milne's EZRecon): an empty answer caused by throttled upstream engines retries once, then raises a block naming the engines, so it is never cached as "no footprint" for a week
+- [x] Custom search queries (2026-10-21): `exposure_search` plugin plus a seven-query importable pack in `source_packs/`. Hit rate on a real domain not measured yet

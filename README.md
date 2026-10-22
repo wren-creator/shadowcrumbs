@@ -59,6 +59,8 @@ Just want to show it off? Open `docs/mockup.html` in any browser. It is the real
 
 1. **New engagement.** Name, plus any of company, domain, IP or CIDR. That's the tab.
 2. **Search tier.** Runs on search engine results only. Nothing touches the client. Every query is cached per engagement, so re-runs are free and quiet.
+   - `exposure_search` adds queries for sensitive looking documents (marked confidential, architecture and runbook files, people lists), public cloud storage that mentions the client, and email addresses seen on paste and code sites. It sticks to operators every search engine handles. For pastes it keeps only the address and the site it was seen on, never the text around it.
+   - `source_packs/exposure_extras.json` holds seven more queries that lean on `intitle:` and `inurl:`, which DuckDuckGo and some SearXNG engines handle unevenly (dev and staging hosts, API docs, open directories, remote access pages, admin tools, default server pages, team pages). Import it on the Sources page when you want them. Expect thinner results until you have a Brave key.
 3. **Deep dive.** Direct lookups and live requests: DNS, RDAP, certificate transparency, public urlscan.io scans, GitHub code search, subdomain resolution with dangling CNAME checks, an HTTP probe, and metadata from the documents you found. Flip the toggle when search has given you what it can.
 4. **Triage.** Mark findings verified, drop the junk, filter the list.
 5. **Export.** Markdown, PDF, or JSON, with scope and run history baked in.
@@ -252,6 +254,7 @@ plugins_user/                your own sources, plus the two templates (files sta
 tools/new_plugin.py          makes a new source from the template
 tools/verify_sources.py      checks every source's endpoint and key from the terminal
 static/                      the dashboard (index.html), the sources page (sources.html), the admin page (admin.html)
+source_packs/                importable sets of custom sources for the Sources page
 fixtures/demo.json           offline demo data
 tests/                       pytest suite
 ```

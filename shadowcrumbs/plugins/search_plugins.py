@@ -119,6 +119,59 @@ LINKEDIN_TITLE = re.compile(
 
 
 @register
+class ExposureSearch(Plugin):
+    name = "exposure_search"
+    tier = "search"
+    description = ("Sensitive looking documents, architecture files, public cloud storage and paste or code site mentions. "
+                   "Only operators every search engine handles (site:, filetype:, quotes, OR). Reads listings, never the pages.")
+    categories = ("documents", "emails", "infrastructure")
+    needs_any = ("domain", "company")
+    order = 25
+
+    def run(self, ctx):
+        d, company = ctx.target.get("domain"), company_of(ctx.target)
+        plan = []     # (kind, query, label)
+        if d:
+            plan += [
+                ("doc", f'site:{d} filetype:pdf "internal use only" OR confidential OR "do not distribute"', "marked sensitive"),
+                ("doc", f"site:{d} filetype:pdf architecture OR \"network diagram\" OR runbook", "architecture or runbook"),
+                ("doc", f"site:{d} filetype:xlsx directory OR roster OR \"contact list\"", "people list"),
+                ("mention", f'site:pastebin.com OR site:github.com "@{d}"', ""),
+                ("format", f'"{company}" "email format" OR "firstname.lastname@{d}"', ""),
+            ]
+        plan.append(("cloud", f'site:s3.amazonaws.com OR site:blob.core.windows.net OR site:storage.googleapis.com "{company}"', ""))
+        seen = set()
+        for kind, q, label in plan:
+            for r in ctx.search.search(q):
+                if kind == "doc":
+                    ext = doc_ext(r.url)
+                    if ext and r.url not in seen and in_domain(hostname(r.url) or "", d):
+                        seen.add(r.url)
+                        yield Finding("documents", r.url, url=r.url, confidence=75,
+                                      notes=f"{ext.upper()}, {label}: {clip(r.title, 120)}")
+                elif kind in ("mention", "format"):
+                    # only the address and where it showed up. The listing text is not kept: a paste can hold anything.
+                    text = f"{r.title} {r.snippet}" if kind == "format" else f"{r.title} {r.snippet} {r.url}"
+                    for m in EMAIL_RE.findall(text):
+                        e = m.lower().strip(".")
+                        if e.split("@", 1)[1].endswith(d) and ("email", e) not in seen:
+                            seen.add(("email", e))
+                            where = hostname(r.url) or "a public page"
+                            yield Finding("emails", e, url=r.url, confidence=55, notes=f"Seen on {where}")
+                elif kind == "cloud":
+                    host = hostname(r.url) or ""
+                    blob = f"{r.title} {r.snippet} {r.url}".lower()
+                    if company.lower().replace(" ", "") not in blob.replace(" ", "") and not (d and d in blob):
+                        continue
+                    first = urlparse(r.url).path.strip("/").split("/", 1)[0]
+                    value = f"cloud storage: {host}/{first}".rstrip("/")
+                    if value not in seen:
+                        seen.add(value)
+                        yield Finding("infrastructure", value, url=r.url, confidence=40,
+                                      notes="Public cloud storage that mentions the client: " + clip(r.title, 100))
+
+
+@register
 class EmployeesSearch(Plugin):
     name = "employees_search"
     tier = "search"
@@ -135,6 +188,7 @@ class EmployeesSearch(Plugin):
             f'site:linkedin.com/in "{company}" administrator OR engineer OR analyst',
             f'site:linkedin.com/in "{company}" mainframe OR "AS/400" OR "IBM i" OR SCADA OR PLC',
             f'site:linkedin.com/in "{company}" security OR CISO OR "IT director"',
+            f'site:linkedin.com/in "{company}" "help desk" OR "service desk" OR sysadmin',
         ]
         for q in queries:
             for r in ctx.search.search(q):
@@ -172,6 +226,8 @@ class TechSearch(Plugin):
             # people brag: profile blurbs and posts name the products they run
             f'site:linkedin.com/in "{company}" responsible OR managed OR implemented OR "experience with"',
             f'site:linkedin.com/posts "{company}" upgraded OR migrated OR "go live" OR deployed',
+            # job ads list the exact products they run
+            f'site:indeed.com OR site:greenhouse.io OR site:lever.co "{company}" Linux OR AWS OR Azure OR Splunk',
         ]
         if d:
             queries += [f"site:{d} careers OR jobs", f'site:{d} "powered by" OR version OR "release notes"']

@@ -1,0 +1,119 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "label": "Dev and staging hosts",
+      "description": "Non-production hosts that search engines indexed.",
+      "category": "subdomains",
+      "needs": [
+        "domain"
+      ],
+      "queries": [
+        "site:{domain} inurl:dev OR inurl:staging OR inurl:test OR inurl:uat"
+      ],
+      "keywords": [],
+      "only_on_domain": true,
+      "extractor": "hostname",
+      "confidence": 60,
+      "author": "Shadowcrumbs pack"
+    },
+    {
+      "label": "API endpoints and docs",
+      "description": "Hosts serving APIs, Swagger or API documentation.",
+      "category": "subdomains",
+      "needs": [
+        "domain"
+      ],
+      "queries": [
+        "site:{domain} inurl:api OR inurl:swagger OR inurl:api-docs"
+      ],
+      "keywords": [],
+      "only_on_domain": true,
+      "extractor": "hostname",
+      "confidence": 60,
+      "author": "Shadowcrumbs pack"
+    },
+    {
+      "label": "Open directory listings",
+      "description": "Pages titled 'index of', which are open folder listings.",
+      "category": "infrastructure",
+      "needs": [
+        "domain"
+      ],
+      "queries": [
+        "site:{domain} intitle:\"index of\""
+      ],
+      "keywords": [
+        "index of"
+      ],
+      "only_on_domain": true,
+      "extractor": "hostname",
+      "confidence": 65,
+      "author": "Shadowcrumbs pack"
+    },
+    {
+      "label": "Remote access front doors",
+      "description": "Webmail, Citrix and VPN login pages.",
+      "category": "infrastructure",
+      "needs": [
+        "domain"
+      ],
+      "queries": [
+        "site:{domain} intitle:\"Outlook Web\" OR intitle:Citrix OR intitle:GlobalProtect OR intitle:\"Pulse Secure\""
+      ],
+      "keywords": [],
+      "only_on_domain": true,
+      "extractor": "hostname",
+      "confidence": 65,
+      "author": "Shadowcrumbs pack"
+    },
+    {
+      "label": "Admin tools facing the internet",
+      "description": "Jenkins, Grafana, Kibana and Jira pages that were not meant to be public.",
+      "category": "infrastructure",
+      "needs": [
+        "domain"
+      ],
+      "queries": [
+        "site:{domain} intitle:Jenkins OR intitle:Grafana OR intitle:Kibana OR intitle:Jira"
+      ],
+      "keywords": [],
+      "only_on_domain": true,
+      "extractor": "hostname",
+      "confidence": 65,
+      "author": "Shadowcrumbs pack"
+    },
+    {
+      "label": "Default server pages",
+      "description": "Out of the box Tomcat, IIS and nginx pages, which name the software.",
+      "category": "tech",
+      "needs": [
+        "domain"
+      ],
+      "queries": [
+        "site:{domain} intitle:\"Apache Tomcat\" OR intitle:\"IIS Windows Server\" OR intitle:\"Welcome to nginx\""
+      ],
+      "keywords": [],
+      "only_on_domain": true,
+      "extractor": "title",
+      "confidence": 60,
+      "author": "Shadowcrumbs pack"
+    },
+    {
+      "label": "Team and leadership pages",
+      "description": "The company's own people pages.",
+      "category": "employees",
+      "needs": [
+        "domain"
+      ],
+      "queries": [
+        "site:{domain} \"our team\" OR leadership OR \"meet the\""
+      ],
+      "keywords": [],
+      "only_on_domain": true,
+      "extractor": "title",
+      "confidence": 50,
+      "author": "Shadowcrumbs pack"
+    }
+  ]
+}
