@@ -232,3 +232,79 @@ def test_full_deep_run_through_engine(store, monkeypatch):
     assert by["dns_records"] == "ok" and by["rdap"] == "ok" and by["http_probe"] == "ok"
     assert all(s in ("ok", "skipped") for s in by.values()), by
     assert ("tech", "Server: nginx") in {(f["category"], f["value"]) for f in store.findings()}
+
+
+# doc_content: what is written inside the files ---------------------------------------------------------
+
+LEAKY_TXT = b"""Prepared by: Jane Doe
+Contact: Raj Patel <raj.patel@acme-demo.test>
+Escalations to mary.jones@acme-demo.test, or outsider@elsewhere.test
+db_password = "Summer2024!xQ"
+aws = AKIAIOSFODNN7EXAMPLE
+url = postgres://svc_app:Hunter2Hunter2@db.acme-demo.test:5432/app
+password: must be eight characters
+password = changeme_here_
+api_key = YOUR_API_KEY
+-----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQEA
+Thanks,
+Priya Nair
+"""
+
+
+def doc_store(store, *urls):
+    for u in urls:
+        store.add_finding("documents", u, "documents_search", "search", u)
+
+
+def test_doc_content_finds_addresses_names_and_masked_secrets(store):
+    u = "https://www.acme-demo.test/old/notes.txt"
+    doc_store(store, u)
+    out = run("doc_content", store, FakeHttp(files={u: LEAKY_TXT}))
+    vals = {(f.category, f.value) for f in out}
+    assert ("emails", "raj.patel@acme-demo.test") in vals and ("emails", "mary.jones@acme-demo.test") in vals
+    assert not any("elsewhere.test" in f.value for f in out)
+    assert {"Jane Doe", "Raj Patel", "Priya Nair"} <= {f.value for f in out if f.category == "employees"}
+    creds = [f.value for f in out if "line" in f.value]
+    assert any(v.startswith("AWS access key AK") and "notes.txt line 5" in v for v in creds)
+    assert any(v.startswith("Private key block in") for v in creds)
+    assert any(v.startswith("Password in a URL") for v in creds)
+    assert any(v.startswith("Password or secret") and "line 4" in v for v in creds)
+    # prose and placeholders are not findings
+    assert not any("line 7" in v or "line 9" in v for v in creds)
+
+
+def test_doc_content_never_keeps_a_whole_secret(store):
+    u = "https://www.acme-demo.test/old/notes.txt"
+    doc_store(store, u)
+    out = run("doc_content", store, FakeHttp(files={u: LEAKY_TXT}))
+    blob = " ".join(f"{f.value} {f.notes} {f.url}" for f in out)
+    for secret in ("Summer2024!xQ", "AKIAIOSFODNN7EXAMPLE", "Hunter2Hunter2", "MIIEowIBAAKCAQEA"):
+        assert secret not in blob
+
+
+def test_doc_content_reads_office_and_pdf_and_skips_the_rest(store):
+    docx = io.BytesIO()
+    with zipfile.ZipFile(docx, "w") as z:
+        z.writestr("word/document.xml",
+                   '<w:document xmlns:w="w"><w:body><w:p><w:t>Owner: Sam Rivera</w:t></w:p>'
+                   '<w:p><w:t>mail sam.rivera@acme-demo.test</w:t></w:p></w:body></w:document>')
+    urls = ["https://www.acme-demo.test/a.docx", "https://www.acme-demo.test/b.txt",
+            "https://www.acme-demo.test/sitemap.xml", "https://www.acme-demo.test/c.png", "https://other.test/d.txt"]
+    doc_store(store, *urls)
+    http = FakeHttp(files={urls[0]: docx.getvalue(), urls[1]: b"\x00\x01\x02" * 400})
+    out = run("doc_content", store, http)
+    assert {f.value for f in out} == {"sam.rivera@acme-demo.test", "Sam Rivera"}
+    assert http.downloads == urls[:2]       # the sitemap, the image and the off domain file are never fetched
+
+
+def test_doc_content_survives_zip_bombs_and_broken_files(store):
+    bomb = io.BytesIO()
+    with zipfile.ZipFile(bomb, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("word/document.xml", b"<a>" + b"A" * (40 * 1024 * 1024) + b"</a>")
+    urls = ["https://www.acme-demo.test/bomb.docx", "https://www.acme-demo.test/broken.pdf",
+            "https://www.acme-demo.test/ok.txt"]
+    doc_store(store, *urls)
+    out = run("doc_content", store, FakeHttp(files={urls[0]: bomb.getvalue(), urls[1]: b"%PDF-1.4 nope",
+                                                    urls[2]: b"Contact: Kim Lee\n"}))
+    assert [f.value for f in out] == ["Kim Lee"]
