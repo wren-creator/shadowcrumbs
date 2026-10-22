@@ -23,7 +23,7 @@ FORBIDDEN = [
 ]
 
 
-@pytest.mark.parametrize("path", ["static/app.js", "static/index.html", "static/admin.js", "static/admin.html"])
+@pytest.mark.parametrize("path", ["static/app.js", "static/index.html", "static/admin.js", "static/admin.html", "static/sources.js", "static/sources.html"])
 def test_dashboard_source_has_no_way_to_make_markup_or_code_from_strings(path):
     text = (ROOT / path).read_text(encoding="utf-8")
     code = re.sub(r"//[^\n]*", "", text) if path.endswith(".js") else text      # a comment may name the rule
@@ -211,3 +211,75 @@ def test_scope_form_records_the_name_and_the_register_shows_it(page, live_app):
     row = page.locator(".roe-card tbody tr").first.inner_text()
     assert "granted" in row and "SOW 2026-114" in row and "Pat Tester" in row and "UTC" in row
     assert page.evaluate("localStorage.getItem('sc-operator')") == "Pat Tester"      # remembered for next time
+
+
+def test_sources_page_shows_hostile_definitions_as_inert_text(page, live_app):
+    from shadowcrumbs import custom_sources as cs
+    cs.create({"label": PAYLOAD_IMG, "description": PAYLOAD_SCRIPT, "category": "tech", "needs": ["domain"],
+               "queries": [f"site:{{domain}} {PAYLOAD_BREAKOUT}"], "keywords": [PAYLOAD_SCRIPT], "extractor": "title",
+               "confidence": 50, "author": PAYLOAD_BREAKOUT})
+    errors, dialogs = [], []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
+
+    page.goto(live_app + "/sources.html", wait_until="networkidle")
+    page.wait_for_selector(".src-card")
+    card = page.locator(".src-card").text_content()                                           # exact text, not the CSS-shouted one
+    assert PAYLOAD_IMG in card and PAYLOAD_SCRIPT in card and PAYLOAD_BREAKOUT in card       # visible, literally
+    page.locator(".src-card summary").click()
+    assert PAYLOAD_BREAKOUT in page.locator(".src-card ul").text_content()
+
+    page.get_by_role("button", name="Edit").click()                                           # loads it into the form
+    assert page.locator("[name=label]").input_value() == PAYLOAD_IMG
+    assert PAYLOAD_BREAKOUT in page.locator("[name=queries]").input_value()
+    assert page.locator("[name=author]").input_value() == PAYLOAD_BREAKOUT
+
+    assert page.evaluate("window.__pwned") is None and dialogs == [] and errors == []
+    assert page.evaluate("""() => document.querySelectorAll(
+        '#main img, #main script, #main iframe, #main object, #main embed, #main svg, #main style, #main b').length""") == 0
+    assert page.evaluate("""() => [...document.querySelectorAll('#main *')]
+        .some(e => [...e.attributes].some(a => a.name.startsWith('on')))""") is False
+
+
+def test_a_teammate_adds_a_source_in_the_form_and_runs_it_from_the_dashboard(page, live_app):
+    from shadowcrumbs.store import Store
+    Store.create("Acme Demo", company="Acme Demo Corp", domain="acme-demo.test")
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+
+    page.goto(live_app + "/sources.html", wait_until="networkidle")
+    page.wait_for_selector("#source-form")
+    page.fill("[name=label]", "Careers pages")
+    page.fill("[name=description]", "Tech hints from job pages")
+    page.fill("[name=queries]", 'site:{domain} careers\n"@{domain}"')
+    assert "2 searches" in page.locator("#live").inner_text()
+
+    page.fill("[name=queries]", "site:{oops}")                                               # live feedback before saving
+    assert "placeholder looks wrong" in page.locator("#live").inner_text()
+    page.fill("[name=queries]", 'site:{domain} careers\n"@{domain}"')
+
+    page.select_option("[name=engagement]", label="Acme Demo")
+    page.get_by_role("button", name="Show the searches").click()
+    page.wait_for_selector("#preview li")
+    shown = page.locator("#preview").inner_text()
+    assert "site:acme-demo.test careers" in shown and '"@acme-demo.test"' in shown
+
+    page.click("#source-form button[type=submit]")                                           # no name yet: the browser stops it
+    assert page.evaluate("document.querySelector('[name=author]').validity.valueMissing") is True
+    assert page.locator("#source-form .ok").count() == 0 and page.locator(".src-card").count() == 0
+    page.fill("[name=author]", "Pat Tester")
+    page.click("#source-form button[type=submit]")
+    page.wait_for_selector("#source-form .ok")
+    assert "custom_careers_pages" in page.locator("#source-form .ok").inner_text()
+    assert "Added by Pat Tester" in page.locator(".src-card").inner_text()
+
+    page.goto(live_app, wait_until="networkidle")                                            # now in the dashboard, no restart
+    page.wait_for_selector("#plugins .plugin")
+    row = page.locator("#plugins .plugin", has_text="custom_careers_pages")
+    assert row.locator(".badge.custom").count() == 1
+    row.get_by_role("button", name="Run").click()
+    page.wait_for_function("document.querySelector('#controls .status')?.textContent.startsWith('Last run')", timeout=15000)
+    page.get_by_role("button", name="Tech Stack").click()
+    page.wait_for_selector("#findings table")
+    assert "custom_careers_pages" in page.locator("#findings table").inner_text()
+    assert errors == []

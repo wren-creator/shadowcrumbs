@@ -1,4 +1,5 @@
 """HTTP API and dashboard. Binds to localhost by default because the data is client confidential."""
+import json
 from datetime import datetime
 from typing import Literal
 
@@ -9,12 +10,13 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import __version__, config, engine, log
+from . import __version__, config, custom_sources, engine, log
 from .exporters import EXPORTERS
 from .plugin import LOAD_ERRORS, REGISTRY, describe, load_plugins
 from .store import Store, list_slugs
 
 load_plugins()
+custom_sources.sync()
 log.logger().info("Shadowcrumbs %s starting, %d sources loaded, %d failed to load", __version__, len(REGISTRY), len(LOAD_ERRORS))
 
 app = FastAPI(title="Shadowcrumbs", version=__version__, docs_url="/api/docs", openapi_url="/api/openapi.json")
@@ -58,6 +60,32 @@ class ScopeUpdate(BaseModel):
     notes: str | None = None
 
 
+class SourceBody(BaseModel):
+    """What the Sources form sends. Every field is checked in custom_sources.clean, not here."""
+    label: str | None = None
+    description: str | None = None
+    category: str | None = None
+    needs: list[str] = []
+    queries: list[str] = []
+    keywords: list[str] = []
+    only_on_domain: bool = False
+    extractor: str = "title"
+    confidence: int = 50
+    author: str | None = None
+    expected_revision: int | None = None
+
+
+class SourcePreview(SourceBody):
+    engagement: str | None = None
+
+
+class SourceImport(BaseModel):
+    sources: list[dict]
+    mode: Literal["skip", "overwrite", "rename"] = "skip"
+    author: str | None = None
+    expected_revision: int | None = None
+
+
 class RunRequest(BaseModel):
     tier: Literal["search", "deep"] = "search"
     plugins: list[str] | None = None
@@ -88,6 +116,7 @@ def meta():
         "categories": [{"key": k, "label": l} for k, l in config.CATEGORIES],
         "plugins": describe(),
         "plugin_load_errors": dict(LOAD_ERRORS),
+        "search_delay": config.search_delay(),
     }
 
 
@@ -180,6 +209,68 @@ def delete_finding(slug: str, fid: int):
         s.delete_finding(fid)
     except KeyError:
         raise HTTPException(404, "no such finding") from None
+    return Response(status_code=204)
+
+
+def _source_errors(fn, *args, **kw):
+    """Run a custom_sources call and turn its failures into the right HTTP errors."""
+    try:
+        return fn(*args, **kw)
+    except custom_sources.Conflict as e:
+        raise HTTPException(409, str(e)) from None
+    except KeyError:
+        raise HTTPException(404, "no such source") from None
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+
+
+@app.get("/api/custom-sources")
+def get_custom_sources():
+    return custom_sources.snapshot()
+
+
+@app.post("/api/custom-sources", status_code=201)
+def create_custom_source(body: SourceBody):
+    data = body.model_dump(exclude={"expected_revision"})
+    entry = _source_errors(custom_sources.create, data, body.expected_revision)
+    return {**entry, "plugin": custom_sources.PREFIX + entry["slug"], "revision": custom_sources.snapshot()["revision"]}
+
+
+@app.post("/api/custom-sources/preview")
+def preview_custom_source(body: SourcePreview):
+    """Show the searches a definition would send for an engagement. No network, nothing saved."""
+    data = body.model_dump(exclude={"expected_revision", "engagement"})
+    defn = _source_errors(custom_sources.clean, data, False)
+    target = {"company": None, "domain": None}
+    if body.engagement:
+        meta = _store(body.engagement).meta()
+        target = {"company": meta["company"], "domain": meta["domain"]}
+    queries, dropped = custom_sources.render_queries(defn, target)
+    return {"queries": queries, "dropped": dropped, "seconds": custom_sources.estimate_seconds(len(queries))}
+
+
+@app.get("/api/custom-sources/export")
+def export_custom_sources():
+    name = f"shadowcrumbs-sources-{datetime.now():%Y%m%d}.json"
+    return Response(json.dumps(custom_sources.export(), indent=2, ensure_ascii=False), media_type="application/json",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+@app.post("/api/custom-sources/import")
+def import_custom_sources(body: SourceImport):
+    return _source_errors(custom_sources.import_sources, body.sources, body.mode, body.author, body.expected_revision)
+
+
+@app.put("/api/custom-sources/{slug}")
+def update_custom_source(slug: str, body: SourceBody):
+    data = body.model_dump(exclude={"expected_revision"})
+    entry = _source_errors(custom_sources.update, slug, data, body.expected_revision)
+    return {**entry, "plugin": custom_sources.PREFIX + slug, "revision": custom_sources.snapshot()["revision"]}
+
+
+@app.delete("/api/custom-sources/{slug}", status_code=204)
+def delete_custom_source(slug: str, author: str = "", expected_revision: int | None = None):
+    _source_errors(custom_sources.delete, slug, author, expected_revision)
     return Response(status_code=204)
 
 

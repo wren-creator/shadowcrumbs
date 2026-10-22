@@ -248,7 +248,8 @@ function renderPlugins() {
         : "never run";
       return el("div", { class: "plugin" },
         el("div", { class: "name" }, p.name,
-          p.touches_target && el("span", { class: "badge active", title: "Sends traffic to the client" }, "ACTIVE")),
+          p.touches_target && el("span", { class: "badge active", title: "Sends traffic to the client" }, "ACTIVE"),
+          p.custom && el("span", { class: "badge custom", title: `Added from the Sources page by ${p.author}` }, "CUSTOM")),
         el("button", { class: "btn small", disabled: running || locked, onclick: () => startRun([p.name]) }, "Run"),
         el("div", { class: "desc" }, p.description),
         el("div", { class: "last" }, "Last: ", el("span", { class: last ? `st-${last.status}` : "" }, lastText)));

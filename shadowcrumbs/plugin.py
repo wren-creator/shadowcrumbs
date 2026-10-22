@@ -41,9 +41,14 @@ class Plugin:
     needs_any: tuple = ()     # runs when at least one of these target fields is set
     order = 50                # lower runs first, so discovery goes before enrichment
     touches_target = False    # True when it sends traffic straight to the client
+    custom = False            # True for sources made in the dashboard (see custom_sources.py)
+    author = ""
 
     def applicable(self, target):
         return not self.needs_any or any(target.get(k) for k in self.needs_any)
+
+    def needs_text(self):
+        return " or ".join(self.needs_any)
 
     def unavailable(self):
         """Return a short reason when the plugin cannot run right now (a missing API key, say), else None.
@@ -91,6 +96,6 @@ def describe():
         rows.append({
             "name": p.name, "tier": p.tier, "description": p.description,
             "categories": list(p.categories), "needs_any": list(p.needs_any),
-            "touches_target": p.touches_target,
+            "touches_target": p.touches_target, "custom": p.custom, "author": p.author,
         })
     return rows

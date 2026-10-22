@@ -30,6 +30,13 @@ def engagements_dir() -> Path:
     return d
 
 
+def sources_file() -> Path:
+    """Where the custom search sources made in the dashboard are kept. Point it at a shared folder (or a git
+    checkout) and the whole team uses one list."""
+    raw = os.environ.get("SHADOWCRUMBS_SOURCES_FILE", "").strip()
+    return Path(raw).expanduser() if raw else data_dir() / "custom_sources.json"
+
+
 def logs_dir() -> Path:
     d = data_dir() / "logs"
     d.mkdir(parents=True, exist_ok=True)

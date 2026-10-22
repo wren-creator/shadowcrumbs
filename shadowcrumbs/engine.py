@@ -68,7 +68,7 @@ def execute(slug, tier, names=None, progress=None):
         began = time.monotonic()
         found, status, err, trace = 0, "ok", None, ""
         if not p.applicable(target):
-            status, err = "skipped", "needs " + " or ".join(p.needs_any)
+            status, err = "skipped", "needs " + p.needs_text()
         elif p.unavailable():
             status, err = "skipped", p.unavailable()
         else:
