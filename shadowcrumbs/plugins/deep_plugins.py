@@ -28,6 +28,14 @@ def dns_lookup(name, rtype):
         return [], "error"
 
 
+def dns_check():
+    """Can this machine resolve names at all? Asks about example.com, never the client."""
+    records, status = dns_lookup("example.com", "A")
+    if status == "ok":
+        return "ok", "DNS lookups work (resolved example.com)"
+    return "fail", f"DNS lookup of example.com gave {status}. Check this machine's resolver or network."
+
+
 @register
 class DnsRecords(Plugin):
     name = "dns_records"
@@ -37,6 +45,9 @@ class DnsRecords(Plugin):
     needs_any = ("domain",)
     order = 10
     touches_target = True
+
+    def verify(self, http):
+        return dns_check()
 
     def run(self, ctx):
         d = ctx.target["domain"]
@@ -93,6 +104,10 @@ class Rdap(Plugin):
     needs_any = ("domain", "ip")
     order = 20
 
+    def verify(self, http):
+        data = http.get_json("https://rdap.org/domain/example.com", timeout=15)
+        return ("ok", "RDAP answered for example.com") if data else ("warn", "RDAP answered, but with nothing for example.com")
+
     def run(self, ctx):
         d, ip = ctx.target.get("domain"), first_ip(ctx.target.get("ip"))
         if d:
@@ -127,6 +142,12 @@ class CrtSh(Plugin):
     needs_any = ("domain",)
     order = 30
 
+    def verify(self, http):
+        r = http.head("https://crt.sh/", timeout=15)         # the search itself is large and slow, so only check the site is up
+        if r.status_code >= 500:
+            return "warn", f"crt.sh answered {r.status_code}. It is often overloaded, try again later."
+        return "ok", f"crt.sh is up ({r.status_code})"
+
     def run(self, ctx):
         d = ctx.target["domain"]
         rows = ctx.http.get_json(f"https://crt.sh/?q=%25.{d}&output=json", timeout=45) or []
@@ -157,6 +178,9 @@ class ResolveSubdomains(Plugin):
     needs_any = ("domain",)
     order = 40
     touches_target = True
+
+    def verify(self, http):
+        return dns_check()
 
     def run(self, ctx):
         hosts = [f["value"] for f in ctx.store.findings("subdomains")][: config.MAX_RESOLVE_HOSTS]

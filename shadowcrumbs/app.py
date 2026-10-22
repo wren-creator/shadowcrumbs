@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import __version__, config, custom_sources, engine, log
+from . import __version__, config, custom_sources, engine, log, verify
 from .exporters import EXPORTERS
 from .plugin import LOAD_ERRORS, REGISTRY, describe, load_plugins
 from .store import Store, list_slugs
@@ -84,6 +84,10 @@ class SourceImport(BaseModel):
     mode: Literal["skip", "overwrite", "rename"] = "skip"
     author: str | None = None
     expected_revision: int | None = None
+
+
+class VerifyRequest(BaseModel):
+    only: list[str] | None = None
 
 
 class RunRequest(BaseModel):
@@ -272,6 +276,22 @@ def update_custom_source(slug: str, body: SourceBody):
 def delete_custom_source(slug: str, author: str = "", expected_revision: int | None = None):
     _source_errors(custom_sources.delete, slug, author, expected_revision)
     return Response(status_code=204)
+
+
+@app.get("/api/verify")
+def get_verify():
+    """The state of a verification in progress, and the last known result of every check."""
+    return verify.status()
+
+
+@app.post("/api/verify", status_code=202)
+def start_verify(body: VerifyRequest | None = None):
+    """Check every source's endpoint and key now. Asks the services about example.com, never a client."""
+    try:
+        verify.start(body.only if body else None)
+    except RuntimeError as e:
+        raise HTTPException(409, str(e)) from None
+    return verify.status()
 
 
 @app.get("/api/engagements/{slug}/authorizations")

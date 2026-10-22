@@ -21,8 +21,12 @@ function el(tag, props = {}, ...kids) {
   return n;
 }
 
-async function api(path) {
-  const res = await fetch(path);
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    headers: opts.body ? { "Content-Type": "application/json" } : {},
+    ...opts,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.detail || `${res.status} ${res.statusText}`);
   return data;
@@ -49,22 +53,28 @@ const state = {
   lines: "300",
   auto: false,
   timer: null,
+  poll: null,
   error: null,
 };
 
-const SECTIONS = [["roe", "ROE register"], ["events", "Run events"], ["applog", "App log"]];
+const SECTIONS = [["roe", "ROE register"], ["verify", "Verify keys and endpoints"], ["events", "Run events"], ["applog", "App log"]];
 
 function renderSections() {
   $("#sections").replaceChildren(...SECTIONS.map(([key, label]) =>
     el("button", {
       "aria-pressed": String(state.section === key),
-      onclick: () => { state.section = key; state.error = null; stopTimer(); render(); },
+      onclick: () => { state.section = key; state.error = null; stopTimer(); stopPoll(); render(); },
     }, label)));
 }
 
 function stopTimer() {
   if (state.timer) clearInterval(state.timer);
   state.timer = null;
+}
+
+function stopPoll() {
+  if (state.poll) clearTimeout(state.poll);
+  state.poll = null;
 }
 
 function select(options, value, onchange, label) {
@@ -103,6 +113,50 @@ function renderRoe(panel) {
     el("p", { class: "dim" }, `${state.roe.length} engagement${state.roe.length === 1 ? "" : "s"}, ${total} ROE record${total === 1 ? "" : "s"}. ` +
       "Records are append only here. They are a log on this machine, not tamper proof, so every change is also in the app log."),
     ...(state.roe.length ? state.roe.map(roeCard) : [el("div", { class: "none" }, "No engagements yet.")]));
+}
+
+// verify keys and endpoints -------------------------------------------
+
+const STATUS_TEXT = { ok: "OK", fail: "FAILED", warn: "WARNING", missing: "NOT SET UP", unchecked: "NOT CHECKED" };
+
+async function verifyNow(only) {
+  try {
+    await api("/api/verify", { method: "POST", body: only ? { only } : {} });
+  } catch (err) {
+    state.error = err.message;
+  }
+  render();
+}
+
+async function renderVerify(panel) {
+  const v = await api("/api/verify");
+  const running = v.state === "running";
+  const counts = {};
+  for (const r of v.results) counts[r.status] = (counts[r.status] || 0) + 1;
+  const summary = Object.keys(STATUS_TEXT).filter((s) => counts[s]).map((s) => `${counts[s]} ${STATUS_TEXT[s].toLowerCase()}`).join(", ");
+
+  panel.replaceChildren(
+    el("p", { class: "dim" },
+      "Checks that each source's address answers and that its key is accepted, before you trust a scan to it. It asks the services about example.com, never your client, and keys only travel in request headers. " +
+      "DuckDuckGo is never queried live (a test query is what trips its throttle), and a Brave check uses one search from your quota."),
+    el("div", { class: "toolbar" },
+      el("button", { class: "btn primary", disabled: running, onclick: () => verifyNow(null) }, running ? `Checking ${v.current || ""} (${v.done}/${v.total})` : "Verify everything"),
+      el("span", { class: "dim" }, v.checked_at ? `Last run ${v.checked_at} UTC. ${summary}.` : "Never run on this machine yet.")),
+    v.error && el("div", { class: "error" }, v.error),
+    state.error && el("div", { class: "error" }, state.error),
+    v.results.length
+      ? el("div", { class: "tablewrap" }, el("table", {},
+          el("thead", {}, el("tr", {}, ...["Status", "What", "Tier", "Result", "Checked (UTC)", ""].map((h) => el("th", {}, h)))),
+          el("tbody", {}, ...v.results.map((r) => el("tr", {},
+            el("td", { class: `vs-${r.status}` }, STATUS_TEXT[r.status] || r.status),
+            el("td", {}, r.label),
+            el("td", { class: "dim" }, r.tier),
+            el("td", { class: "notes" }, r.detail, r.cost && el("div", { class: "dim" }, r.cost)),
+            el("td", { class: "dim" }, `${r.checked_at} (${r.took_ms} ms)`),
+            el("td", {}, el("button", { class: "btn small", disabled: running, onclick: () => verifyNow([r.id]) }, "Re-check")))))))
+      : el("div", { class: "none" }, "No results yet. Press Verify everything."));
+  state.error = null;
+  if (running) state.poll = setTimeout(render, 1000);
 }
 
 // run events ---------------------------------------------------------
@@ -176,6 +230,7 @@ async function render() {
   try {
     await loadRoe();
     if (state.section === "roe") renderRoe(panel);
+    else if (state.section === "verify") await renderVerify(panel);
     else if (state.section === "events") await renderEvents(panel);
     else await renderAppLog(panel);
     state.error = null;

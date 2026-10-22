@@ -25,6 +25,20 @@ class UrlscanSearch(Plugin):
     needs_any = ("domain",)
     order = 36
 
+    def verify(self, http):
+        headers = {"User-Agent": "Shadowcrumbs", "Accept": "application/json"}
+        key = os.environ.get("URLSCAN_API_KEY")
+        if key:
+            headers["API-Key"] = key
+        r = http.get("https://urlscan.io/api/v1/search/", params={"q": "page.domain:example.com", "size": 1}, headers=headers, timeout=10)
+        if r.status_code in (401, 403):
+            return "fail", (f"urlscan.io rejected the key ({r.status_code}). Check URLSCAN_API_KEY." if key
+                            else f"urlscan.io refused an anonymous search ({r.status_code}).")
+        if r.status_code == 429:
+            return "warn", "urlscan.io rate limited this check (429). Try again in a minute."
+        r.raise_for_status()
+        return "ok", "key accepted" if key else "reachable, no key set so the free limits apply"
+
     def run(self, ctx):
         d = ctx.target["domain"]
         rows = self._search(ctx, d)
@@ -113,6 +127,19 @@ class GithubCodeSearch(Plugin):
 
     def unavailable(self):
         return None if os.environ.get("GITHUB_TOKEN") else "needs GITHUB_TOKEN"
+
+    def verify(self, http):
+        """The rate limit call is free and does not count against any limit. It also shows what the token can see."""
+        r = http.get("https://api.github.com/rate_limit", timeout=10, headers={
+            "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}", "User-Agent": "Shadowcrumbs", "X-GitHub-Api-Version": "2022-11-28"})
+        if r.status_code == 401:
+            return "fail", "GitHub rejected the token (401). Check GITHUB_TOKEN."
+        r.raise_for_status()
+        left = ((r.json().get("resources") or {}).get("code_search") or {}).get("remaining")
+        detail = "token accepted" + (f", {left} code searches left this minute" if left is not None else "")
+        if "repo" in [s.strip() for s in r.headers.get("X-OAuth-Scopes", "").split(",")]:
+            return "warn", detail + ". This token has the repo scope, so GitHub search can see private code. Use a fine-grained token with public repositories only."
+        return "ok", detail
 
     def run(self, ctx):
         d = ctx.target["domain"]

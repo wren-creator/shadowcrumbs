@@ -283,3 +283,77 @@ def test_a_teammate_adds_a_source_in_the_form_and_runs_it_from_the_dashboard(pag
     page.wait_for_selector("#findings table")
     assert "custom_careers_pages" in page.locator("#findings table").inner_text()
     assert errors == []
+
+
+class _Resp:
+    status_code, headers = 200, {}
+
+    def json(self):
+        return {}
+
+    def raise_for_status(self):
+        pass
+
+
+class _QuietHttp:
+    """Stands in for the network during the Verify click-through: every service answers 200."""
+    def __init__(self, **kw):
+        self.log = lambda *a, **k: None
+
+    def get(self, url, **kw):
+        return _Resp()
+
+    head = get
+
+    def get_json(self, url, timeout=None):
+        return {"ldhName": "EXAMPLE.COM"}
+
+
+def test_verify_section_shows_hostile_results_as_inert_text(page, live_app):
+    from shadowcrumbs import config
+    import json
+    bad = {"id": "source:evil", "label": PAYLOAD_IMG, "tier": "deep", "status": "fail", "cost": PAYLOAD_SCRIPT,
+           "detail": f"{PAYLOAD_SCRIPT} {PAYLOAD_BREAKOUT}", "took_ms": 3, "checked_at": "2026-10-22 00:00:00"}
+    (config.data_dir()).mkdir(parents=True, exist_ok=True)
+    (config.data_dir() / "verify.json").write_text(json.dumps({"checked_at": "2026-10-22 00:00:00", "checks": {"source:evil": bad}}))
+    errors, dialogs = [], []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
+
+    page.goto(live_app + "/admin.html", wait_until="networkidle")
+    page.get_by_role("button", name="Verify keys and endpoints").click()
+    page.wait_for_selector("#panel table")
+    text = page.locator("#panel table").text_content()
+    assert PAYLOAD_IMG in text and PAYLOAD_SCRIPT in text and PAYLOAD_BREAKOUT in text
+    assert page.evaluate("window.__pwned") is None and dialogs == [] and errors == []
+    assert page.evaluate("""() => document.querySelectorAll(
+        '#main img, #main script, #main iframe, #main object, #main embed, #main svg, #main style, #main b').length""") == 0
+    assert page.evaluate("""() => [...document.querySelectorAll('#main *')]
+        .some(e => [...e.attributes].some(a => a.name.startsWith('on')))""") is False
+
+
+def test_verify_click_through_then_the_dashboard_shows_the_check(page, live_app, monkeypatch):
+    from shadowcrumbs import verify
+    from shadowcrumbs.store import Store
+    from shadowcrumbs.plugins import deep_plugins
+    monkeypatch.setattr(verify, "HttpClient", _QuietHttp)
+    monkeypatch.setattr(deep_plugins, "dns_lookup", lambda name, rtype: (["192.0.2.1"], "ok"))      # no real DNS in a test
+    Store.create("Acme Demo", company="Acme Demo Corp", domain="acme-demo.test")
+
+    page.goto(live_app + "/admin.html", wait_until="networkidle")
+    page.get_by_role("button", name="Verify keys and endpoints").click()
+    page.wait_for_function("document.querySelector('#panel')?.innerText.includes('Never run')")
+    page.get_by_role("button", name="Verify everything").click()
+    page.wait_for_selector("#panel table tbody tr", timeout=15000)
+    rows = page.locator("#panel table tbody").inner_text()
+    assert "OK" in rows and "NOT SET UP" in rows and "needs HIBP_API_KEY" in rows
+    assert "Last run" in page.locator("#panel").inner_text()
+
+    page.locator("#panel table tbody tr", has_text="rdap").get_by_role("button", name="Re-check").click()
+    page.wait_for_function("document.querySelector('#panel table tbody')?.innerText.includes('RDAP answered')", timeout=15000)
+
+    page.goto(live_app, wait_until="networkidle")                                          # the dashboard now shows what was found
+    page.get_by_role("button", name="DEEP DIVE").click()
+    row = page.locator("#plugins .plugin", has_text="rdap").first
+    assert "Check: ok" in row.inner_text()
+    assert "Check:" not in page.locator("#plugins .plugin", has_text="http_probe").first.inner_text()    # nothing to say, nothing shown

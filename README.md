@@ -148,6 +148,34 @@ When a source comes back empty or red, the answer is usually in the logs. There 
 
 What the logs do contain is your targets and your search queries. That makes them as client confidential as the databases. They sit under `data/`, which is gitignored. Do not paste them into a public issue without reading them first.
 
+## Verifying sources: endpoints and keys
+
+Before you trust a scan to a source, check that it can actually work. **Verify keys and endpoints** on the admin page makes one cheap request per source and says what it found. From a terminal:
+
+```bash
+python tools/verify_sources.py                  # everything
+python tools/verify_sources.py github_code_search hibp_breaches
+python tools/verify_sources.py --strict         # a missing key or a warning also counts as a failure
+```
+
+It exits 1 when a check fails, so it also works as a preflight before an engagement. Each result is one of:
+
+| Status | Meaning |
+|---|---|
+| **OK** | The address answered, and the key (if there is one) was accepted |
+| **FAILED** | Unreachable, or the key was rejected. The detail says which |
+| **WARNING** | It works, but look: crt.sh is overloaded, a SearXNG engine is down, or your GitHub token can see private repos |
+| **NOT SET UP** | A key or file the source needs is not configured, with the variable to set. Not a failure |
+| **NOT CHECKED** | There is no safe check. DeHashed (the only test of a key is a billable search) and the sources that only talk to the client's own systems |
+
+What it sends, so there are no surprises. Every request asks a service about `example.com`, never your client, and keys travel in request headers only, as in a real run. The search engine for each tier is checked too. DuckDuckGo is **never** queried live, because a test query is exactly what trips its throttle: you get the recorded block state instead. A Brave check uses one search from your quota, and the page says so. SearXNG gets one query through your own instance and reports any upstream engines that are not answering. The GitHub check uses the free rate limit call, so it costs nothing, and it warns if the token has the `repo` scope.
+
+Results are remembered in `data/verify.json` and shown as a **Check:** line on each source in the dashboard, so a teammate sees a rejected key before they press Run. A run happens in the background and the table fills in as each check finishes. Keys are scrubbed from every result, the file and the log, and the tests plant one to prove it.
+
+Honest limits. The HIBP check was written from the vendor's docs and tested against a fake response, like the rest of that plugin, because there was no key to try it live. The public services (RDAP, crt.sh, urlscan.io, the Internet Archive, DNS) were checked live on 2026-10-21.
+
+**Your own plugins** can take part by adding a `verify(self, http)` method that makes one request and returns `("ok" | "warn" | "fail", "what happened")`. The deep template (`plugins_user/_template_deep.py`) has a working one. Sources without it show as not checked.
+
 ## API keys and tokens
 
 Keys live in environment variables, never in a file inside this repo: `BRAVE_API_KEY`, `HIBP_API_KEY`, `DEHASHED_API_KEY`, `URLSCAN_API_KEY` (optional), `GITHUB_TOKEN`. `.env` files are gitignored as a backstop, and GitHub secret scanning is on for the repo. Shadowcrumbs only ever puts a key in the request header that needs it. It never writes one to a finding, a log, the query cache, or an error message, and the tests check that.
@@ -201,6 +229,7 @@ shadowcrumbs/
   engine.py                  runs plugins, tracks progress, enforces the gate
   log.py                     app log, and the one place secrets are scrubbed from logs
   custom_sources.py          sources added from the dashboard (data, never code)
+  verify.py                  checks each source's endpoint and key, and the search engines
   store.py                   one SQLite file per engagement
   search.py                  search providers, per-engagement query cache
   netclient.py               HTTP for deep dive plugins
@@ -210,6 +239,7 @@ shadowcrumbs/
   plugins/deep_plugins.py    deep dive sources
 plugins_user/                your own sources, plus the two templates (files starting with _ are never loaded)
 tools/new_plugin.py          makes a new source from the template
+tools/verify_sources.py      checks every source's endpoint and key from the terminal
 static/                      the dashboard (index.html), the sources page (sources.html), the admin page (admin.html)
 fixtures/demo.json           offline demo data
 tests/                       pytest suite

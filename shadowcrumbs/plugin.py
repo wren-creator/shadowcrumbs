@@ -55,6 +55,13 @@ class Plugin:
         The run is recorded as skipped with that reason instead of failing."""
         return None
 
+    def verify(self, http):
+        """Optional. Check the endpoint and the key this source depends on, with one cheap, harmless request.
+        Return (status, detail): status is ok, warn, fail or unchecked. Return None when there is nothing to check.
+        Rules: ask about example.com, never the client. Keys go in headers only. Never put one in the detail.
+        An exception counts as a failure and is reported (with keys scrubbed)."""
+        return None
+
     def run(self, ctx):
         raise NotImplementedError
 

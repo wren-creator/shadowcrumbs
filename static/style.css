@@ -177,6 +177,12 @@ dialog .row { display: flex; gap: 10px; justify-content: flex-end; }
 .lv-error { color: var(--red); }
 .lv-debug { color: var(--dim); }
 
+/* verification */
+.vs-ok { color: var(--accent); }
+.vs-fail { color: var(--red); }
+.vs-warn, .vs-missing { color: var(--amber); }
+.vs-unchecked { color: var(--dim); }
+
 /* sources page */
 .fld { display: grid; gap: 4px; margin-bottom: 14px; }
 .fld .fl { color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }

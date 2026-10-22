@@ -49,6 +49,7 @@ class MySource(Plugin):
 - `plugins_user/wayback_urls.py` is a small working example. The README has the full contract.
 - Categories are `employees`, `emails`, `documents`, `tech`, `subdomains`, `infrastructure`.
 - **Search tier** sources go through `ctx.search`, which caches every query and paces them. **Deep tier** sources go through `ctx.http`. Anything that sends traffic to the client sets `touches_target = True` so the dashboard shows the ACTIVE badge.
+- Add a `verify(self, http)` method so the Verify page can check your endpoint and key: one cheap request about example.com, return `("ok" | "warn" | "fail", "detail")`. The deep template has one.
 - If your source needs an API key or a file, override `unavailable()` to return a short reason like `"needs MY_API_KEY"`. The run is then recorded as skipped with that reason, not as a failure.
 - Write a test with a fake `http` or `search` object. `tests/test_deep.py` and `tests/test_credentials.py` show the pattern. If a source sends data to a third party, say so in its description and in the README.
 
