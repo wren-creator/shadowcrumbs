@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 
 from ..plugin import Finding, Plugin, register
 from ..signatures import scan
-from ..util import EMAIL_RE, clip, email_format, guess_company, hostname, in_domain, window
+from ..util import EMAIL_RE, clip, email_format, guess_company, hostname, in_domain, placeholder_email, window
 
 DOC_EXTS = ("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "csv", "txt", "rtf", "odt", "ods")
 
@@ -101,6 +101,8 @@ class EmailsSearch(Plugin):
                 for m in EMAIL_RE.findall(text):
                     e = m.lower().strip(".")
                     host = e.split("@", 1)[1]
+                    if placeholder_email(e, in_domain(hostname(r.url) or "", d)):
+                        continue
                     if (host == d or host.endswith("." + d)) and e not in found:
                         found[e] = r
                         user = e.split("@", 1)[0]
@@ -154,14 +156,19 @@ class ExposureSearch(Plugin):
                     text = f"{r.title} {r.snippet}" if kind == "format" else f"{r.title} {r.snippet} {r.url}"
                     for m in EMAIL_RE.findall(text):
                         e = m.lower().strip(".")
+                        if placeholder_email(e, in_domain(hostname(r.url) or "", d)):
+                            continue
                         if e.split("@", 1)[1].endswith(d) and ("email", e) not in seen:
                             seen.add(("email", e))
                             where = hostname(r.url) or "a public page"
                             yield Finding("emails", e, url=r.url, confidence=55, notes=f"Seen on {where}")
                 elif kind == "cloud":
                     host = hostname(r.url) or ""
-                    blob = f"{r.title} {r.snippet} {r.url}".lower()
-                    if company.lower().replace(" ", "") not in blob.replace(" ", "") and not (d and d in blob):
+                    # the bucket itself has to carry the name. A textbook page that mentions the client does not count.
+                    key = re.sub(r"[^a-z0-9]", "", company.lower())
+                    stem = d.split(".")[0] if d else ""
+                    where = re.sub(r"[^a-z0-9]", "", r.url.lower())
+                    if not ((key and key in where) or (len(stem) >= 4 and stem in where)):
                         continue
                     first = urlparse(r.url).path.strip("/").split("/", 1)[0]
                     value = f"cloud storage: {host}/{first}".rstrip("/")

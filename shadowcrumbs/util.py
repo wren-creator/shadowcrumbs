@@ -75,6 +75,23 @@ def window(text, start, end, pad=70):
     return clip(text[max(0, start - pad): end + pad], 2 * pad + (end - start) + 4)
 
 
+# Email-format sites (RocketReach, ContactOut and the like) print example addresses for every company.
+# Templates are never real. Example names are only suspect on somebody else's page: a company's own contact
+# page can legitimately list jane.doe@.
+TEMPLATE_LOCALS = {
+    "first", "last", "firstlast", "lastfirst", "firstname", "lastname", "firstnamelastname", "lastnamefirstname",
+    "firstinitiallastname", "firstinitiallast", "firstnamelast", "firstlastname", "flast", "fname", "lname",
+    "fnamelname", "name", "yourname", "user", "username", "email", "example",
+}
+EXAMPLE_LOCALS = {a + b for f in ("jane", "john", "j") for l in ("doe", "smith") for a, b in ((f, l), (l, f))}
+
+
+def placeholder_email(address, on_target_page):
+    """True for example addresses that format-guessing sites print for every company."""
+    compact = re.sub(r"[._{}\[\]-]", "", address.split("@", 1)[0].lower())
+    return compact in TEMPLATE_LOCALS or (not on_target_page and compact in EXAMPLE_LOCALS)
+
+
 def email_format(emails, domain):
     """Guess the address format from harvested addresses. Returns (label, hits, total) or None."""
     locals_ = [e.split("@")[0] for e in emails if e.split("@")[0] not in ROLE_MAILBOXES]
