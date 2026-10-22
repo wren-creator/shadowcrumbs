@@ -58,6 +58,16 @@ Deep dive is locked until the engagement has an authorization reference (SOW num
 
 **Who recorded it, and when.** Every change to the authorization (granted, updated, revoked) adds a row to that engagement's ROE history: the reference, the name of the person who recorded it, and the date and time in UTC. The dashboard asks for your name whenever you change the authorization, and remembers it in your browser. The API refuses a change without one (`authorized_by`). Rows are append only: nothing in the app edits or deletes one. Be straight about what that is worth: it is a log kept in a SQLite file on your machine, so anyone who can write to the file can change it, and it goes away with the engagement. So every change is also written to the app log, and deleting an engagement writes its whole ROE history there first. Databases made before this existed get one row marked "unknown (recorded before the audit trail)" with no time, because nobody recorded one.
 
+## The admin panel
+
+**ADMIN** in the dashboard header (or `http://127.0.0.1:8470/admin.html`) opens a page with three sections.
+
+- **ROE register.** Every engagement with its full authorization history: the action, the reference, who recorded it, the date and time in UTC, and the same moment on your local clock. Read only. The dashboard also shows the latest line under Scope, so you can see at a glance who unlocked deep dive and when.
+- **Run events.** The troubleshooting trail for one engagement, filterable by run and by level, with optional auto refresh while a scan is going. This is where to look first when a source comes back empty.
+- **App log.** The tail of `data/logs/shadowcrumbs.log`, filterable by level.
+
+There is no login, same as the rest of the tool: it is one operator on one machine and it only answers on localhost. The admin page shows the same client confidential data as the dashboard, so the same rule applies. Do not expose it. Like the dashboard, it only ever renders text, and `tests/test_dashboard_safety.py` loads it in a real browser with hostile names and log lines to check that.
+
 Sources marked **ACTIVE** in the dashboard send traffic to the client's own systems.
 
 ## Adding a data source
@@ -162,7 +172,7 @@ shadowcrumbs/
   plugins/search_plugins.py  search tier sources
   plugins/deep_plugins.py    deep dive sources
 plugins_user/                your own sources
-static/                      the dashboard
+static/                      the dashboard (index.html) and the admin page (admin.html)
 fixtures/demo.json           offline demo data
 tests/                       pytest suite
 ```
