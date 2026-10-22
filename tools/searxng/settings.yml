@@ -1,5 +1,22 @@
-# Minimal SearXNG config for Shadowcrumbs. Everything else comes from SearXNG's defaults.
-use_default_settings: true
+# SearXNG config for Shadowcrumbs. Everything not named here comes from SearXNG's defaults.
+use_default_settings:
+  engines:
+    # Only the engines below run. The default set carries torrent, shopping, translation and map engines that
+    # answer a dork with nothing but noise, and every extra upstream is one more request from your IP.
+    keep_only:
+      - google
+      - yandex
+      - bing
+      - brave
+      - startpage
+      - duckduckgo
+      - mojeek
+      - qwant
+      - yahoo
+      - gitlab
+      - bitbucket
+      - codeberg
+      - national vulnerability database
 search:
   formats:
     - html
@@ -8,3 +25,34 @@ server:
   limiter: false    # private instance on localhost, nobody else can reach it
   image_proxy: false
   # secret_key comes from the SEARXNG_SECRET environment variable, see ../searxng.sh
+engines:
+  # Switch every kept engine on by name. A few ship off and some versions flip others, so this does not depend on
+  # the defaults. google and yandex are the best dork engines and the quickest to be CAPTCHAd, so check
+  # unresponsive_engines in the JSON output if they go quiet. Shadowcrumbs reports those by name.
+  - name: google
+    disabled: false
+  - name: yandex
+    disabled: false
+  - name: bing
+    disabled: false
+  - name: brave
+    disabled: false
+  - name: startpage
+    disabled: false
+  - name: duckduckgo
+    disabled: false
+  - name: mojeek
+    disabled: false
+  - name: qwant
+    disabled: false
+  - name: yahoo
+    disabled: false
+  # Code hosts and the vulnerability database sit in the "it" category, which a plain search does not ask for.
+  - name: gitlab
+    disabled: false
+  - name: bitbucket
+    disabled: false
+  - name: codeberg
+    disabled: false
+  - name: national vulnerability database
+    disabled: false

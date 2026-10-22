@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# One front door for the whole stack: the dashboard and, if you want it, your own SearXNG.
-#   ./shadowcrumbs.sh start [--searxng] [--demo] [--port N] [--delay SECS]
+# One front door for the whole stack: the dashboard and your own SearXNG, which it starts for you when it can.
+#   ./shadowcrumbs.sh start [--no-searxng | --searxng] [--demo] [--port N] [--delay SECS]
 #   ./shadowcrumbs.sh status
 #   ./shadowcrumbs.sh stop
 #   ./shadowcrumbs.sh restart [same switches as start]
@@ -34,12 +34,41 @@ app_state() {   # prints the status line, returns 0 when running
     ./start.sh --status | grep -q "is running"
 }
 
+ensure_searxng() {   # $1 = auto or required. Exports the URL on success. In auto mode any problem means carry on without it.
+    local mode="$1"
+    skip() {
+        if [ "$mode" = required ]; then echo "$1"; exit 1; fi
+        echo "$1 Carrying on without SearXNG (--no-searxng silences this)."
+        return 1
+    }
+    if [ -n "${SHADOWCRUMBS_SEARXNG_URL:-}" ]; then
+        echo "SHADOWCRUMBS_SEARXNG_URL is already set ($SHADOWCRUMBS_SEARXNG_URL), using that one."
+        return 0
+    fi
+    if searxng_answers "$SX_URL"; then
+        echo "SearXNG already answering at $SX_URL."
+    else
+        if lsof -nP -iTCP:"$SX_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+            skip "Port $SX_PORT is taken by something that is not SearXNG (set SEARXNG_PORT to use another)." || return 1
+        fi
+        command -v docker >/dev/null || { skip "Docker is not installed, so there is no SearXNG." || return 1; }
+        docker info >/dev/null 2>&1 || { skip "Docker is installed but not running." || return 1; }
+        echo "Starting SearXNG (the first run downloads its image, which can take a minute)."
+        ./tools/searxng.sh up
+        touch "$SX_MARK"
+        wait_for_searxng || { skip "SearXNG did not answer. Check ./tools/searxng.sh logs." || return 1; }
+    fi
+    export SHADOWCRUMBS_SEARXNG_URL="$SX_URL"
+}
+
 cmd_start() {
-    local want_sx=0 pass=()
+    local sx=auto demo=0 pass=()
     while [ $# -gt 0 ]; do
         case "$1" in
-            --searxng) want_sx=1 ;;
-            --demo|--foreground) pass+=("$1") ;;
+            --searxng) sx=required ;;       # insist on it: stop with an error if it cannot start
+            --no-searxng) sx=off ;;
+            --demo) demo=1; pass+=("$1") ;;
+            --foreground) pass+=("$1") ;;
             --port|--delay) pass+=("$1" "${2:?$1 needs a value}"); shift ;;
             -h|--help) usage; exit 0 ;;
             *) echo "Unknown switch: $1"; usage; exit 1 ;;
@@ -47,21 +76,10 @@ cmd_start() {
         shift
     done
 
-    if [ "$want_sx" -eq 1 ]; then
-        if [ -n "${SHADOWCRUMBS_SEARXNG_URL:-}" ]; then
-            echo "SHADOWCRUMBS_SEARXNG_URL is already set ($SHADOWCRUMBS_SEARXNG_URL), using that one."
-        else
-            command -v docker >/dev/null || { echo "Docker is not installed, so --searxng cannot work."; exit 1; }
-            docker info >/dev/null 2>&1 || { echo "Docker is installed but not running. Start it and try again."; exit 1; }
-            if searxng_answers "$SX_URL"; then
-                echo "SearXNG already answering at $SX_URL."
-            else
-                ./tools/searxng.sh up
-                touch "$SX_MARK"
-                wait_for_searxng || { echo "Check ./tools/searxng.sh logs"; exit 1; }
-            fi
-            export SHADOWCRUMBS_SEARXNG_URL="$SX_URL"
-        fi
+    # demo mode and a forced engine never touch the network, so there is nothing for SearXNG to do
+    if [ "$sx" = auto ] && { [ "$demo" -eq 1 ] || [ -n "${SHADOWCRUMBS_SEARCH:-}" ]; }; then sx=off; fi
+    if [ "$sx" != off ]; then
+        ensure_searxng "$sx" || true
     fi
     ./start.sh ${pass[@]+"${pass[@]}"}
 }

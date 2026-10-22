@@ -24,16 +24,18 @@ Licensed GPL-3.0, see [LICENSE](LICENSE). No warranty, as the licence says.
 ./stop.sh               # stop it
 ```
 
-To run the whole stack with your own SearXNG in one go (needs Docker running), use the front door:
+To run the whole stack, use the front door. It starts your own SearXNG for you when Docker is running, waits until it answers, then starts the dashboard pointed at it:
 
 ```bash
-./shadowcrumbs.sh start --searxng     # SearXNG up, wait until it answers, then the dashboard pointed at it
+./shadowcrumbs.sh start               # SearXNG (if it can), then the dashboard
+./shadowcrumbs.sh start --no-searxng  # dashboard only
+./shadowcrumbs.sh start --searxng     # insist on SearXNG: stop with an error if it cannot start
 ./shadowcrumbs.sh status              # dashboard, SearXNG, and whether DuckDuckGo has blocked this machine
 ./shadowcrumbs.sh stop                # dashboard, and SearXNG if this script started it
-./shadowcrumbs.sh restart --searxng
+./shadowcrumbs.sh restart
 ```
 
-`start` also takes `--demo`, `--port N`, `--delay SECS` and `--foreground`. A SearXNG that was already running, or one you pointed at with `SHADOWCRUMBS_SEARXNG_URL`, is used but never stopped for you. `start.sh`, `stop.sh` and `tools/searxng.sh` still work on their own.
+If Docker is missing or not running, or the SearXNG port is taken, a plain `start` says so and carries on without it. `--demo` and a forced `SHADOWCRUMBS_SEARCH` skip SearXNG, since neither touches the network. The first run downloads the SearXNG image. `start` also takes `--demo`, `--port N`, `--delay SECS` and `--foreground`. A SearXNG that was already running, or one you pointed at with `SHADOWCRUMBS_SEARXNG_URL`, is used but never stopped for you. `start.sh`, `stop.sh` and `tools/searxng.sh` still work on their own.
 
 **Keys.** [docs/API-KEYS.md](docs/API-KEYS.md) says what each key unlocks and links to where you get it (Brave and a free GitHub token are the two that matter for a first scan). Copy `env.example` to `.env`, fill in what you have, and run `chmod 600 .env`. Shadowcrumbs loads it at start, so keys stay out of your shell history. A variable already set in your shell wins. A `.env` that other users can read is not loaded, and it says so. `./shadowcrumbs.sh status` shows which of the Brave and GitHub keys are set, names only.
 
@@ -238,7 +240,7 @@ Heads up: HIBP and DeHashed are third parties. Running them sends the addresses 
 | `exa` | Last in the chain, only when the others are throttled | `EXA_API_KEY` |
 | `fixture` | Demos and tests | `SHADOWCRUMBS_FIXTURE` |
 
-**Running your own SearXNG.** `./tools/searxng.sh up` starts one in Docker, bound to 127.0.0.1:8888 with JSON output on and a random secret generated on your machine (`tools/searxng/.secret`, gitignored). Then `export SHADOWCRUMBS_SEARXNG_URL=http://127.0.0.1:8888` before `./start.sh`. `./tools/searxng.sh down` stops it. Checked live on 2026-10-09: it returned 10 results per query for `site:`, `filetype:` and `OR` searches. Honest caveat: SearXNG relays to other engines, and from my network DuckDuckGo and Startpage showed it CAPTCHAs and Brave suspended it for too many requests, so one engine did all the answering. Check `unresponsive_engines` in its JSON output if results look thin.
+**Running your own SearXNG.** `./tools/searxng.sh up` starts one in Docker (the front door does this for you), bound to 127.0.0.1:8888 with JSON output on, and only the 13 engines listed in `tools/searxng/settings.yml` switched on (google, yandex, bing, brave, startpage, duckduckgo, mojeek, qwant, yahoo for dorks, plus gitlab, bitbucket, codeberg and the national vulnerability database). `up` recreates the container, so an edit to that file always takes effect and a random secret generated on your machine (`tools/searxng/.secret`, gitignored). Then `export SHADOWCRUMBS_SEARXNG_URL=http://127.0.0.1:8888` before `./start.sh`. `./tools/searxng.sh down` stops it. Checked live on 2026-10-09: it returned 10 results per query for `site:`, `filetype:` and `OR` searches. Honest caveat: SearXNG relays to other engines, and from my network DuckDuckGo and Startpage showed it CAPTCHAs and Brave suspended it for too many requests, so one engine did all the answering. Checked again on 2026-10-22 with the 13 engine set: one dork (`site:mozilla.org filetype:pdf`) was answered by Bing and Yandex only, and the other seven web engines refused it (CAPTCHA, access denied or too many requests). Bing ignored the `site:` and returned unrelated pages, Yandex honored it. The code hosts and the vulnerability database sit in SearXNG's `it` category, which a plain search does not ask for, and added nothing to a dork. Check `unresponsive_engines` in its JSON output if results look thin.
 
 Other settings: `SHADOWCRUMBS_SEARCH_DELAY` (seconds between live queries, default 8), `SHADOWCRUMBS_BLOCK_MINUTES` (how long to stay quiet after DuckDuckGo blocks you, default 60), `SHADOWCRUMBS_IGNORE_BLOCK=1` (try anyway), `SHADOWCRUMBS_LOG_LEVEL` (INFO or DEBUG, see Troubleshooting a scan), `SHADOWCRUMBS_DATA` (where engagements live and logs go), `SHADOWCRUMBS_UA` (user agent, see the limits below), `SHADOWCRUMBS_ALLOWED_HOSTS` (extra Host names the server will answer to, for a reverse proxy).
 

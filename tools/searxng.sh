@@ -9,7 +9,9 @@ SECRET_FILE=".secret"     # random, made on first use, gitignored
 case "${1:-}" in
   up)
     [ -f "$SECRET_FILE" ] || { umask 077; head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' > "$SECRET_FILE"; }
-    SEARXNG_SECRET="$(cat "$SECRET_FILE")" SEARXNG_PORT="$PORT" docker compose up -d
+    # --force-recreate because settings.yml is a single-file mount: an editor that replaces the file leaves a running
+    # container looking at the old copy, and a plain "up" or "restart" would carry on with the old engine list.
+    SEARXNG_SECRET="$(cat "$SECRET_FILE")" SEARXNG_PORT="$PORT" docker compose up -d --force-recreate
     echo "SearXNG is starting at http://127.0.0.1:$PORT (give it a few seconds)"
     echo "export SHADOWCRUMBS_SEARXNG_URL=http://127.0.0.1:$PORT"
     ;;
