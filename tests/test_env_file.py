@@ -48,3 +48,18 @@ def test_a_file_other_users_can_read_is_not_loaded(envfile, mode):
 
 def test_no_file_is_not_a_problem(envfile):
     assert config.load_env_file() == ([], None)
+
+
+def test_the_real_env_file_can_never_be_committed():
+    """Keys live in .env. If it ever stops being ignored, or gets tracked, this fails before a commit can carry it."""
+    import subprocess
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    git = lambda *a: subprocess.run(["git", "-C", str(root), *a], capture_output=True, text=True)
+    if git("rev-parse", "--git-dir").returncode != 0:
+        pytest.skip("not a git checkout")
+    assert git("check-ignore", "-q", ".env").returncode == 0, ".env must be in .gitignore"
+    assert git("check-ignore", "-q", ".env.local").returncode == 0
+    assert git("check-ignore", "-q", "env.example").returncode == 1, "the example file has to stay committable"
+    tracked = git("ls-files").stdout.split()
+    assert not [f for f in tracked if f.rsplit("/", 1)[-1].startswith(".env")], "a .env file is tracked"
