@@ -110,9 +110,11 @@ def execute(slug, tier, names=None, progress=None, domains=None):
     summary["searches_live"] = search.live_queries
     summary["searches_cached"] = search.cached_queries
     summary["search_blocked"] = search.blocked
+    summary["searches_by_engine"] = dict(search.by_engine)
     store.prune_events()
-    app_log.info("[%s] %s tier finished: %s new, %s live searches, %s cached%s", slug, tier, summary["new_findings"],
-                 search.live_queries, search.cached_queries, ", search engine blocked" if search.blocked else "")
+    app_log.info("[%s] %s tier finished: %s new, %s live searches%s, %s cached%s", slug, tier, summary["new_findings"],
+                 search.live_queries, " (" + ", ".join(f"{k} {v}" for k, v in search.by_engine.items()) + ")" if search.by_engine else "",
+                 search.cached_queries, ", search engine blocked" if search.blocked else "")
     return summary
 
 

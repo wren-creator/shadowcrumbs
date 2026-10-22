@@ -8,6 +8,7 @@ Providers:
   fixture  canned results from a JSON file, for demos and tests
 """
 import json
+import math
 import os
 import random
 import re
@@ -32,11 +33,23 @@ class Result:
 
 
 class SearchBlocked(Exception):
-    """The search engine is rate limiting or challenging us."""
+    """The search engine is rate limiting or challenging us.
+
+    `permanent` means it will not recover during this run (a refused key, used up credits, a DuckDuckGo block), so it
+    is not asked again. Otherwise it sits out a cooldown, see config.engine_cooldown, and then rejoins."""
+
+    permanent = False
+
+    def __init__(self, *args, permanent=None):
+        super().__init__(*args)
+        if permanent is not None:
+            self.permanent = permanent
 
 
 class SearchQuiet(SearchBlocked):
     """We chose not to ask: this engine blocked us recently and we are waiting it out."""
+
+    permanent = True
 
 
 class DuckDuckGoHTML:
@@ -53,7 +66,8 @@ class DuckDuckGoHTML:
             raise SearchBlocked(
                 "DuckDuckGo is throttling this IP. The block usually lasts an hour or more, and retrying can extend it, "
                 "so stop here. Wait it out, keep SHADOWCRUMBS_SEARCH_DELAY at 5 to 10 seconds, "
-                "or set BRAVE_API_KEY and run a deep dive."
+                "or set BRAVE_API_KEY and run a deep dive.",
+                permanent=True,
             )
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
@@ -104,7 +118,7 @@ class Brave:
             raise SearchBlocked("Brave Search API rate limit hit")
         if r.status_code in (401, 402, 403, 422):
             # a bad key or a used up plan fails every query, so treat it as a block and let the next engine take over
-            raise SearchBlocked(f"Brave refused the request ({r.status_code}). Check BRAVE_API_KEY and your plan.")
+            raise SearchBlocked(f"Brave refused the request ({r.status_code}). Check BRAVE_API_KEY and your plan.", permanent=True)
         r.raise_for_status()
         rows = r.json().get("web", {}).get("results", [])
         return [
@@ -130,9 +144,11 @@ class Exa:
         )
         if r.status_code == 429:
             raise SearchBlocked("Exa rate limit hit")
-        if r.status_code in (401, 402, 403, 503):
+        if r.status_code in (401, 402, 403):
             # a bad key or used up credits fails every query, so treat it as a block and stop spending on it this run
-            raise SearchBlocked(f"Exa refused the request ({r.status_code}). Check EXA_API_KEY and your credits.")
+            raise SearchBlocked(f"Exa refused the request ({r.status_code}). Check EXA_API_KEY and your credits.", permanent=True)
+        if r.status_code == 503:
+            raise SearchBlocked("Exa is over capacity right now")
         r.raise_for_status()
         data = r.json()
         # When nothing matches a site: restriction, Exa quietly drops it and answers with unrelated pages. Taking
@@ -188,7 +204,8 @@ class SearXNG:
             raise SearchBlocked("SearXNG rate limit hit")
         if r.status_code == 403:
             raise SearchBlocked(
-                "SearXNG refused the request. Add json under search.formats in its settings.yml."
+                "SearXNG refused the request. Add json under search.formats in its settings.yml.",
+                permanent=True,
             )
         r.raise_for_status()
         return r.json()
@@ -277,22 +294,29 @@ EXA_PACE = 0.5     # seconds. Exa allows 10 queries a second by default; this st
 
 
 class SearchClient:
-    def __init__(self, provider, store=None, delay=None, sleep=time.sleep):
-        """`provider` is one engine or a list of them, best first."""
+    def __init__(self, provider, store=None, delay=None, sleep=time.sleep, clock=time.monotonic):
+        """`provider` is one engine or a list of them, best first. With SHADOWCRUMBS_SEARCH_BALANCE on, the engines
+        that have a share (config.search_weight) take turns in proportion to it and the rest stay in reserve."""
         self.chain = list(provider) if isinstance(provider, (list, tuple)) else [provider]
         self.provider = self.chain[0]   # the one tried last, for logs
-        self._down = set()              # engines that blocked us during this run
+        self._down = {}                 # engine name -> clock time it rejoins, or infinity if it will not this run
+        self._last_at = {}              # engine name -> clock time it was last asked, so each keeps its own pace
         self._explicit_delay = delay is not None or "SHADOWCRUMBS_SEARCH_DELAY" in os.environ
         provider = self.provider
         self.store = store
         # canned fixture data is not a search engine, so there is nothing to be polite to
         self.delay = (0.0 if provider.name == "fixture" else config.search_delay()) if delay is None else delay
         self._sleep = sleep
+        self._clock = clock
         self._lock = threading.Lock()
-        self._last = 0.0
+        self.balance = config.search_balance() and len(self.chain) > 1
+        self._share = {p.name: config.search_weight(p.name) for p in self.chain}
+        self._credit = {p.name: 0.0 for p in self.chain}   # smooth weighted round robin: who is owed the next turn
+        self._began = 0.0
         self.live_queries = 0
         self.cached_queries = 0
-        self.blocked = False   # one throttle ends live searching for the rest of this run
+        self.by_engine = {}    # engine name -> live queries it answered this run
+        self.blocked = False   # every engine is down: live searching ends for the rest of this run
         self.log = lambda msg, level="info": None   # the engine swaps in the run's event log
 
     def search(self, query, n=20):
@@ -303,10 +327,6 @@ class SearchClient:
                 self.log(f"search [{self.provider.name}] cache hit, {len(cached)} results: {query}", "debug")
                 return [Result(**r) for r in cached]
         with self._lock:
-            wait = self._delay_for(self._active()) * random.uniform(0.7, 1.3) - (time.monotonic() - self._last)
-            if wait > 0:
-                self._sleep(wait)
-            began = time.monotonic()
             try:
                 results = self._live(query, n)
             except SearchBlocked as e:
@@ -315,10 +335,10 @@ class SearchClient:
             except Exception as e:
                 self.log(f"search [{self.provider.name}] failed on: {query} | {type(e).__name__}: {e}", "error")
                 raise
-            self._last = time.monotonic()
         results, dropped = self._keep_on_site(query, results)
-        self.log(f"search [{self.provider.name}] {len(results)} results in {time.monotonic() - began:.1f}s: {query}")
+        self.log(f"search [{self.provider.name}] {len(results)} results in {time.monotonic() - self._began:.1f}s: {query}")
         self.live_queries += 1
+        self.by_engine[self.provider.name] = self.by_engine.get(self.provider.name, 0) + 1
         # An engine that answered only with pages off the site did not honour the operator, which says nothing about
         # the site. Caching that empty answer would hide a real footprint for a week, so the next run asks again.
         if self.store and not (dropped and not results):
@@ -339,8 +359,33 @@ class SearchClient:
                      f"results that were not on {', '.join(hosts)}: {query}", "warning")
         return kept, dropped
 
-    def _active(self):
-        return next((p for p in self.chain if p.name not in self._down), self.chain[-1])
+    def _is_down(self, name):
+        until = self._down.get(name)
+        if until is None:
+            return False
+        if self._clock() >= until:
+            del self._down[name]
+            self.log(f"search [{name}] cooldown over, back in the rotation", "info")
+            return False
+        return True
+
+    def _order(self):
+        """The engines to try for this query, in order. Without balancing that is the chain minus whatever is down.
+        With it, the engine whose turn it is goes first, then the other engines with a share, then the reserves."""
+        up = [p for p in self.chain if not self._is_down(p.name)]
+        if not self.balance:
+            return up
+        pool = [p for p in up if self._share[p.name] > 0]
+        reserve = [p for p in up if self._share[p.name] <= 0]
+        if len(pool) > 1:
+            total = sum(self._share[p.name] for p in pool)
+            for p in pool:
+                self._credit[p.name] += self._share[p.name]
+            first = max(pool, key=lambda p: self._credit[p.name])   # a tie goes to the earlier engine in the chain
+            self._credit[first.name] -= total
+            rest = sorted((p for p in pool if p is not first), key=lambda p: -self._share[p.name])
+            pool = [first] + rest
+        return pool + reserve
 
     def _delay_for(self, provider):
         """Brave and Exa are APIs, so they get a short pace unless you set one yourself. Everything else uses the long one."""
@@ -351,41 +396,52 @@ class SearchClient:
                 return EXA_PACE
         return self.delay
 
+    def _pace(self, provider):
+        """Each engine keeps its own pace, so a quick API is not held back by a slow scraper it takes turns with."""
+        last = self._last_at.get(provider.name)
+        if last is None:
+            return
+        wait = self._delay_for(provider) * random.uniform(0.7, 1.3) - (self._clock() - last)
+        if wait > 0:
+            self._sleep(wait)
+
     def _live(self, query, n):
-        """One live query. A throttle moves on to the next engine in the chain. When every engine has blocked
-        us, live searching ends for this run.
+        """One live query. A throttle moves on to the next engine. When every engine is down, live searching ends
+        for this run.
 
         Retrying the same engine does not help: DuckDuckGo blocks run an hour or more, and every request sent while
         blocked may extend it. A DuckDuckGo block is remembered across runs, so the next run stays quiet until the
-        cooldown passes.
+        cooldown passes. Other engines sit out a short cooldown and rejoin, unless the block was permanent.
         """
         if self.blocked:
             raise SearchBlocked("Search engine is throttling this IP, skipping the rest of this run.")
         last = None
-        for i, prov in enumerate(self.chain):
-            if prov.name in self._down:
-                continue
+        order = self._order()
+        for i, prov in enumerate(order):
             self.provider = prov
+            self._pace(prov)
+            self._began = time.monotonic()
             try:
                 if prov.name == "ddg":
                     self._respect_earlier_block()
                 results = prov.search(query, n)
             except SearchBlocked as e:
-                self._down.add(prov.name)
+                self._down[prov.name] = math.inf if e.permanent else self._clock() + config.engine_cooldown()
                 last = e
                 if prov.name == "ddg" and not isinstance(e, SearchQuiet):
                     marker = config.block_marker()
                     marker.parent.mkdir(parents=True, exist_ok=True)
                     marker.write_text(json.dumps({"at": time.time()}))
-                nxt = [p.name for p in self.chain[i + 1:] if p.name not in self._down]
-                if nxt:
-                    self.log(f"search [{prov.name}] BLOCKED, moving on to {nxt[0]}: {e}", "warning")
+                if i + 1 < len(order):
+                    self.log(f"search [{prov.name}] BLOCKED, moving on to {order[i + 1].name}: {e}", "warning")
                 continue
+            finally:
+                self._last_at[prov.name] = self._clock()
             if prov.name == "ddg":
                 config.block_marker().unlink(missing_ok=True)
             return results
         self.blocked = True
-        raise last
+        raise last or SearchBlocked("No search engine is available.")
 
     def _respect_earlier_block(self):
         marker = config.block_marker()
