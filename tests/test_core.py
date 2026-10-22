@@ -75,7 +75,7 @@ def test_email_format_guess():
 
 def test_search_tier_end_to_end(demo):
     summary = engine.execute(demo.slug, "search")
-    assert [p["status"] for p in summary["plugins"]] == ["ok"] * 5
+    assert [p["status"] for p in summary["plugins"]] == ["ok"] * 6
 
     subs = vals(demo, "subdomains")
     assert {"portal.acme-demo.test", "vpn.acme-demo.test", "mail.acme-demo.test", "files.acme-demo.test"} <= subs
