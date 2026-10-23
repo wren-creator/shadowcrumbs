@@ -25,6 +25,16 @@ CREATE TABLE IF NOT EXISTS findings (
   created_at TEXT NOT NULL,
   UNIQUE(category, value)
 );
+CREATE TABLE IF NOT EXISTS evidence (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  finding_id INTEGER NOT NULL REFERENCES findings(id) ON DELETE CASCADE,
+  plugin TEXT NOT NULL,
+  url TEXT NOT NULL,
+  note TEXT,
+  confidence INTEGER NOT NULL DEFAULT 50,
+  created_at TEXT NOT NULL,
+  UNIQUE(finding_id, url)
+);
 CREATE TABLE IF NOT EXISTS runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   plugin TEXT NOT NULL,
@@ -71,6 +81,17 @@ def now():
 UNSPECIFIED = "unspecified"
 
 
+def corroborate(current, new):
+    """Confidence after a second, independent source reports the same thing. Each source is a chance the finding
+    is wrong, so the chances multiply: 70 and 55 give 86, not 70. It never goes past 99, only a person's
+    verification is certainty."""
+    return min(99, round(100 - (100 - current) * (100 - new) / 100))
+
+
+def confidence_label(n):
+    return "high" if n >= 75 else "medium" if n >= 50 else "low"
+
+
 def clean_person(name):
     """The name of whoever records an authorization. One line, no control characters, 80 characters at most."""
     name = re.sub(r"[\x00-\x1f\x7f]+", " ", name or "")
@@ -114,6 +135,11 @@ class Store:
                     "INSERT INTO authorizations(action, auth_ref, recorded_by, recorded_at) VALUES ('granted', ?, ?, NULL)",
                     (m.get("auth_ref", ""), "unknown (recorded before the audit trail)"),
                 )
+            # findings from before the evidence table keep the one link they had
+            for r in c.execute("SELECT id, plugins, url, confidence, created_at FROM findings WHERE url IS NOT NULL AND url != ''"
+                               " AND id NOT IN (SELECT finding_id FROM evidence)").fetchall():
+                c.execute("INSERT OR IGNORE INTO evidence(finding_id, plugin, url, note, confidence, created_at) VALUES (?, ?, ?, NULL, ?, ?)",
+                          (r[0], (r[1].split(",")[0] or "unknown"), r[2], r[3], r[4]))
             c.commit()
         finally:
             c.close()
@@ -278,8 +304,11 @@ class Store:
 
     # findings ---------------------------------------------------------
 
-    def add_finding(self, category, value, plugin, tier, url=None, confidence=50, notes=None):
-        """Insert a finding. Returns True when it is new, False when it was already known."""
+    def add_finding(self, category, value, plugin, tier, url=None, confidence=50, notes=None, evidence=()):
+        """Insert a finding. Returns True when it is new, False when it was already known.
+
+        Every link that supports it is kept: `url` plus anything in `evidence`, a list of (url, note) pairs. A second
+        source finding the same thing adds its links and raises the confidence (see corroborate)."""
         if category not in config.CATEGORY_KEYS:
             raise ValueError(f"unknown category {category!r}")
         value = (value or "").strip()[:500]
@@ -287,25 +316,32 @@ class Store:
             raise ValueError("empty finding value")
         confidence = max(0, min(100, int(confidence)))
         notes = (notes or "")[:1000] or None
+        links = [(url, None)] if url else []
+        links += [(u, n) for u, n in evidence if u]
         with self.conn() as c:
             row = c.execute(
-                "SELECT id, plugins, url FROM findings WHERE category=? AND value=?", (category, value)
+                "SELECT id, plugins, url, confidence FROM findings WHERE category=? AND value=?", (category, value)
             ).fetchone()
             if row:
+                fid, is_new = row["id"], False
                 plugins = [p for p in row["plugins"].split(",") if p]
                 if plugin not in plugins:
                     plugins.append(plugin)
-                c.execute(
-                    "UPDATE findings SET plugins=?, url=COALESCE(url, ?) WHERE id=?",
-                    (",".join(plugins), url, row["id"]),
+                    c.execute("UPDATE findings SET plugins=?, confidence=? WHERE id=?",
+                              (",".join(plugins), corroborate(row["confidence"], confidence), fid))
+                c.execute("UPDATE findings SET url=COALESCE(url, ?) WHERE id=?", (url, fid))
+            else:
+                cur = c.execute(
+                    "INSERT INTO findings(category, value, plugins, tier, url, confidence, notes, created_at)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (category, value, plugin, tier, url, confidence, notes, now()),
                 )
-                return False
-            c.execute(
-                "INSERT INTO findings(category, value, plugins, tier, url, confidence, notes, created_at)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (category, value, plugin, tier, url, confidence, notes, now()),
-            )
-            return True
+                fid, is_new = cur.lastrowid, True
+            for u, n in links:
+                c.execute(
+                    "INSERT OR IGNORE INTO evidence(finding_id, plugin, url, note, confidence, created_at)"
+                    " VALUES (?, ?, ?, ?, ?, ?)", (fid, plugin, u[:2000], (n or "")[:500] or None, confidence, now()))
+            return is_new
 
     def findings(self, category=None):
         sql = "SELECT * FROM findings"
@@ -316,9 +352,14 @@ class Store:
         sql += " ORDER BY category, confidence DESC, value COLLATE NOCASE"
         with self.conn() as c:
             rows = [dict(r) for r in c.execute(sql, args)]
+            ev = {}
+            for e in c.execute("SELECT finding_id, plugin, url, note, confidence FROM evidence ORDER BY id"):
+                ev.setdefault(e["finding_id"], []).append({k: e[k] for k in ("plugin", "url", "note", "confidence")})
         for r in rows:
             r["plugins"] = [p for p in r["plugins"].split(",") if p]
             r["verified"] = bool(r["verified"])
+            r["evidence"] = ev.get(r["id"], [])
+            r["confidence_label"] = confidence_label(r["confidence"])
         return rows
 
     def update_finding(self, fid, notes=None, verified=None, confidence=None):
@@ -341,6 +382,7 @@ class Store:
 
     def delete_finding(self, fid):
         with self.conn() as c:
+            c.execute("DELETE FROM evidence WHERE finding_id=?", (fid,))      # foreign keys are off, so no cascade
             cur = c.execute("DELETE FROM findings WHERE id=?", (fid,))
             if cur.rowcount == 0:
                 raise KeyError(fid)

@@ -25,6 +25,37 @@ def _by_category(findings):
     return grouped
 
 
+def _evidence_md(f):
+    """Every supporting link for a finding, as markdown, each tagged with the source that found it."""
+    rows = f.get("evidence") or ([{"plugin": f["plugins"][0] if f["plugins"] else "", "url": f["url"], "note": None}]
+                                 if f["url"] else [])
+    seen, out = set(), []
+    for e in rows:
+        if not e["url"] or e["url"] in seen:
+            continue
+        seen.add(e["url"])
+        label = e["plugin"] or "source"
+        out.append(f"[{_md(label)}]({e['url']})")
+    return ", ".join(out) if out else ""
+
+
+def _evidence_lines(f):
+    """The same links as plain text, one per line, for formats that cannot render markdown links (PDF)."""
+    rows = f.get("evidence") or ([{"plugin": f["plugins"][0] if f["plugins"] else "", "url": f["url"]}]
+                                 if f["url"] else [])
+    seen, out = set(), []
+    for e in rows:
+        if not e["url"] or e["url"] in seen:
+            continue
+        seen.add(e["url"])
+        out.append(f"{e['plugin'] or 'source'}: {e['url']}")
+    return "\n".join(out)
+
+
+def _conf(f):
+    return f"{f['confidence']} ({f.get('confidence_label') or ''})".strip()
+
+
 def _scope_line(meta):
     if meta["authorized"]:
         line = f"Authorized. Reference: {meta['auth_ref']}"
@@ -62,12 +93,12 @@ def to_markdown(store):
         if not rows:
             out.append("Nothing found.")
             continue
-        out += ["| Finding | Confidence | Verified | Source | Notes |", "|---|---|---|---|---|"]
+        out += ["| Finding | Confidence | Verified | Plugins | Evidence | Notes |", "|---|---|---|---|---|---|"]
         for f in rows:
-            value = f"[{_md(f['value'])}]({f['url']})" if f["url"] and key == "documents" else _md(f["value"])
+            value = f"[{_md(f['value'])}]({f['url']})" if f["url"] else _md(f["value"])
             out.append(
-                f"| {value} | {f['confidence']} | {'yes' if f['verified'] else 'no'} | "
-                f"{_md(', '.join(f['plugins']))} | {_md(f['notes'])} |"
+                f"| {value} | {_conf(f)} | {'yes' if f['verified'] else 'no'} | "
+                f"{_md(', '.join(f['plugins']))} | {_evidence_md(f)} | {_md(f['notes'])} |"
             )
 
     out += ["", "## Run history", "", "| Source | Tier | Started | Status | New findings | Error |", "|---|---|---|---|---|---|"]
@@ -91,6 +122,10 @@ def to_pdf(store):
 
     def P(text, style=cell):
         return Paragraph(escape(str(text if text is not None else "")), style)
+
+    def P_lines(text, style=cell):
+        """Like P, but each line of `text` (already split on \\n) becomes its own line in the cell."""
+        return Paragraph("<br/>".join(escape(line) for line in str(text or "").split("\n")), style)
 
     def table(rows, widths):
         t = Table(rows, colWidths=widths, repeatRows=1)
@@ -122,10 +157,10 @@ def to_pdf(store):
         if not rows:
             story.append(Paragraph("Nothing found.", styles["BodyText"]))
             continue
-        data = [[P(h, head) for h in ("Finding", "Conf.", "Source", "Notes")]]
+        data = [[P(h, head) for h in ("Finding", "Conf.", "Plugins", "Evidence", "Notes")]]
         for f in rows:
-            data.append([P(f["value"]), P(f["confidence"]), P(", ".join(f["plugins"])), P(f["notes"] or "")])
-        story.append(table(data, [2.5 * inch, 0.5 * inch, 1.2 * inch, 3.0 * inch]))
+            data.append([P(f["value"]), P(_conf(f)), P(", ".join(f["plugins"])), P_lines(_evidence_lines(f)), P(f["notes"] or "")])
+        story.append(table(data, [1.8 * inch, 0.6 * inch, 0.9 * inch, 1.7 * inch, 2.2 * inch]))
 
     story += [Spacer(1, 10), Paragraph("Run history", styles["Heading2"])]
     data = [[P(h, head) for h in ("Source", "Tier", "Started", "Status", "New", "Error")]]

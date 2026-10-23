@@ -344,15 +344,25 @@ function renderFindings() {
 
 function findingRow(f) {
   const href = f.url && safeUrl(f.url);
-  const valueNode = href && f.category === "documents"
+  const valueNode = href
     ? el("a", { href, target: "_blank", rel: "noopener noreferrer" }, f.value)
     : f.value;
-  const evidence = href && f.category !== "documents"
-    ? el("div", {}, el("a", { href, target: "_blank", rel: "noopener noreferrer", class: "src" }, "evidence"))
-    : null;
+  // one link per independent source that reported this, each tagged with the plugin that found it, so the
+  // report lists every supporting URL, not just the one the finding happens to be keyed on.
+  const links = [];
+  const seen = new Set();
+  for (const e of f.evidence || []) {
+    const h = e.url && safeUrl(e.url);
+    if (!h || seen.has(h)) continue;
+    seen.add(h);
+    links.push(el("a", { href: h, target: "_blank", rel: "noopener noreferrer", class: "src", title: e.note || "" },
+      e.plugin || "source"));
+  }
+  const evidence = links.length ? el("div", { class: "evidence" }, links.flatMap((n, i) => i ? [", ", n] : [n])) : null;
   return el("tr", { class: f.verified ? "verified" : "" },
     el("td", { class: "val" }, valueNode, evidence),
-    el("td", { class: "num" }, el("span", { class: "conf" }, f.confidence)),
+    el("td", { class: "num" },
+      el("span", { class: `conf conf-${f.confidence_label || ""}`, title: f.confidence_label || "" }, f.confidence)),
     el("td", { class: "src" }, f.plugins.join(", ")),
     el("td", { class: "notes" }, f.notes || ""),
     el("td", {},

@@ -137,8 +137,13 @@ td.val { word-break: break-all; }
 td.notes { color: var(--dim); font-size: 12px; max-width: 420px; }
 td.num { width: 56px; }
 .conf { display: inline-block; min-width: 2.2em; text-align: right; }
+.conf-high { color: var(--accent); }
+.conf-medium { color: var(--dim); }
+.conf-low { color: #b45309; }
 tr.verified td.val { color: var(--accent); }
 .src { color: var(--dim); font-size: 12px; }
+.evidence { margin-top: 2px; }
+.evidence .src { margin-right: 2px; }
 .none { color: var(--dim); padding: 20px 0; }
 
 /* runs */

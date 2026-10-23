@@ -3,6 +3,7 @@ import re
 from urllib.parse import urlparse
 
 from ..content import SKIPPED_NAMES
+from ..paths import classify, notes_for
 from ..plugin import Finding, Plugin, register
 from ..signatures import scan
 from ..util import EMAIL_RE, clip, email_format, guess_company, hostname, in_domain, placeholder_email, window
@@ -130,9 +131,11 @@ LINKEDIN_TITLE = re.compile(
 class ExposureSearch(Plugin):
     name = "exposure_search"
     tier = "search"
-    description = ("Sensitive looking documents, architecture files, public cloud storage and paste or code site mentions. "
-                   "Only operators every search engine handles (site:, filetype:, quotes, OR). Reads listings, never the pages.")
-    categories = ("documents", "emails", "infrastructure")
+    description = ("Sensitive looking documents, architecture files, public cloud storage, paste or code site mentions, "
+                   "and indexed admin pages, login portals, backups and open directories on the domain. "
+                   "Only operators every search engine handles (site:, filetype:, quotes, OR, inurl:, intitle:). "
+                   "Reads listings, never the pages.")
+    categories = ("documents", "emails", "infrastructure", "exposures")
     needs_any = ("domain", "company")
     order = 25
 
@@ -146,6 +149,10 @@ class ExposureSearch(Plugin):
                 ("doc", f"site:{d} filetype:xlsx directory OR roster OR \"contact list\"", "people list"),
                 ("mention", f'site:pastebin.com OR site:github.com "@{d}"', ""),
                 ("format", f'"{company}" "email format" OR "firstname.lastname@{d}"', ""),
+                ("path", f"site:{d} intitle:\"index of\"", ""),
+                ("path", f"site:{d} inurl:admin OR inurl:login OR inurl:portal OR inurl:wp-admin", ""),
+                ("path", f"site:{d} inurl:backup OR inurl:.bak OR inurl:.sql OR inurl:.env OR inurl:.git", ""),
+                ("path", f"site:{d} intitle:phpinfo OR inurl:server-status OR inurl:actuator", ""),
             ]
         plan.append(("cloud", f'site:s3.amazonaws.com OR site:blob.core.windows.net OR site:storage.googleapis.com "{company}"', ""))
         seen = set()
@@ -168,6 +175,14 @@ class ExposureSearch(Plugin):
                             seen.add(("email", e))
                             where = hostname(r.url) or "a public page"
                             yield Finding("emails", e, url=r.url, confidence=55, notes=f"Seen on {where}")
+                elif kind == "path":
+                    if not d or not in_domain(hostname(r.url) or "", d) or r.url in seen:
+                        continue
+                    kind2 = classify(r.url, r.title)
+                    if kind2 and kind2[0] != "file":
+                        seen.add(r.url)
+                        yield Finding("exposures", r.url, url=r.url, confidence=65,
+                                      notes=notes_for(kind2[0], f"Found indexed by search: {clip(r.title, 120)}"))
                 elif kind == "cloud":
                     host = hostname(r.url) or ""
                     # the bucket itself has to carry the name. A textbook page that mentions the client does not count.

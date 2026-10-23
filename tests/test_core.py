@@ -48,15 +48,37 @@ def test_authorization_needs_a_reference():
 
 def test_findings_dedupe_and_merge_sources(demo):
     assert demo.add_finding("emails", "a@b.test", "p1", "search", confidence=70) is True
-    assert demo.add_finding("emails", "a@b.test", "p2", "deep", url="https://x.test") is False
+    assert demo.add_finding("emails", "a@b.test", "p2", "deep", url="https://x.test", confidence=50) is False
     (f,) = demo.findings("emails")
     assert f["plugins"] == ["p1", "p2"] and f["url"] == "https://x.test"
+    # a second, independent source raises confidence (70 and 50 compound to 85), it never just overwrites it
+    assert f["confidence"] == 85 and f["confidence_label"] == "high"
     with pytest.raises(ValueError):
         demo.add_finding("nope", "x", "p", "search")
     demo.update_finding(f["id"], verified=True, notes="checked")
     assert demo.findings("emails")[0]["verified"] is True
     demo.delete_finding(f["id"])
     assert demo.findings() == []
+
+
+def test_evidence_keeps_every_source_link_not_just_the_first(demo):
+    demo.add_finding("subdomains", "vpn.acme.test", "subdomains_search", "search",
+                      url="https://engine.example/result1", confidence=70)
+    demo.add_finding("subdomains", "vpn.acme.test", "crtsh", "deep",
+                      url="https://crt.sh/?q=vpn.acme.test", confidence=85)
+    # the same plugin reporting the same link again must not duplicate the evidence row
+    demo.add_finding("subdomains", "vpn.acme.test", "crtsh", "deep",
+                      url="https://crt.sh/?q=vpn.acme.test", confidence=85)
+    (f,) = demo.findings("subdomains")
+    links = {(e["plugin"], e["url"]) for e in f["evidence"]}
+    assert links == {("subdomains_search", "https://engine.example/result1"), ("crtsh", "https://crt.sh/?q=vpn.acme.test")}
+
+
+def test_corroborate_compounds_confidence_but_never_reaches_certainty():
+    from shadowcrumbs.store import corroborate
+    assert corroborate(70, 50) == 85
+    assert corroborate(50, 50) == 75
+    assert corroborate(99, 99) == 99
 
 
 def test_engagements_are_siloed():

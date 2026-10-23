@@ -11,6 +11,7 @@ import requests
 from defusedxml import ElementTree as ET
 
 from .. import config
+from ..paths import classify, notes_for
 from ..plugin import Finding, Plugin, register
 from ..signatures import scan
 from ..util import clip, first_ip, hostname, in_domain
@@ -354,3 +355,57 @@ class DocMetadata(Plugin):
             if meta.get("Company"):
                 yield Finding("tech", f"Office company name field: {clip(meta['Company'], 80)}", url=url,
                               confidence=50, notes="Organization name stamped into Office files.")
+
+
+# A short, well-known list of paths that a misconfigured host sometimes serves. One GET each, root domain and
+# every subdomain found so far, capped by MAX_PROBE_HOSTS the same as http_probe. This is active recon against
+# the client, gated by the same authorization check as the rest of the deep tier.
+PROBE_PATHS = (
+    "/.git/config", "/.git/HEAD", "/.env", "/.env.local", "/.svn/entries", "/.DS_Store",
+    "/wp-config.php.bak", "/web.config", "/.htpasswd", "/.aws/credentials", "/id_rsa",
+    "/backup.zip", "/backup.sql", "/backup.tar.gz", "/db.sql", "/dump.sql", "/database.sql",
+    "/admin/", "/administrator/", "/wp-admin/", "/phpmyadmin/", "/manager/html",
+    "/server-status", "/server-info", "/actuator/health", "/phpinfo.php",
+    "/swagger-ui.html", "/api-docs", "/graphql",
+)
+
+
+@register
+class ExposureProbe(Plugin):
+    name = "exposure_probe"
+    tier = "deep"
+    description = ("Requests a short, well-known list of paths (exposed .git/.env, backups, admin panels, phpinfo, "
+                   "actuator health) on the domain and every subdomain found so far, and reports which ones answer. "
+                   "One GET per path, nothing is downloaded past a few bytes.")
+    categories = ("exposures",)
+    needs_any = ("domain",)
+    order = 65
+    touches_target = True
+
+    def run(self, ctx):
+        d = ctx.target["domain"]
+        hosts = [d] + [f["value"] for f in ctx.store.findings("subdomains") if f["value"] != d]
+        for h in hosts[: config.MAX_PROBE_HOSTS]:
+            info = ctx.http.probe(h)      # same root probe http_probe uses, so we know which scheme answers
+            if not info:
+                continue
+            base = f"{info['scheme']}://{h}"
+            for path in PROBE_PATHS:
+                url = base + path
+                r = None
+                try:
+                    r = ctx.http.get(url, timeout=10, allow_redirects=False, stream=True, verify=False)
+                    if r.status_code != 200:
+                        continue
+                    sample = next(r.iter_content(512), b"")
+                except requests.RequestException:
+                    continue
+                finally:
+                    if r is not None and hasattr(r, "close"):
+                        r.close()
+                if not sample.strip() or b"<html" in sample[:200].lower():
+                    # a catch-all site that answers 200 for everything (a custom 404 page) is noise, not a finding
+                    continue
+                kind = classify(url) or ("file", "Exposed file")
+                yield Finding("exposures", url, url=url, confidence=70,
+                              notes=notes_for(kind[0], f"Answered 200 on {h}. Confirm by hand before relying on this."))

@@ -102,7 +102,7 @@ def plant_hostile_data():
     from shadowcrumbs.store import Store
     s = Store.create(PAYLOAD_IMG, company=PAYLOAD_SCRIPT, domain="acme-demo.test", auth_ref=PAYLOAD_BREAKOUT, authorized=True,
                      authorized_by=PAYLOAD_IMG)
-    for cat in ("employees", "emails", "documents", "tech", "subdomains", "infrastructure"):
+    for cat in ("employees", "emails", "documents", "tech", "subdomains", "infrastructure", "exposures"):
         s.add_finding(cat, f"{PAYLOAD_IMG} {cat}", PAYLOAD_SCRIPT, "search", GOOD_URL, 50, f"{PAYLOAD_BREAKOUT} <b>bold</b>")
         for i, bad in enumerate(BAD_URLS):
             s.add_finding(cat, f"bad url {i} {PAYLOAD_SCRIPT}", PAYLOAD_IMG, "search", bad, 50, PAYLOAD_SCRIPT)

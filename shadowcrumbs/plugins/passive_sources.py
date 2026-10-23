@@ -6,6 +6,7 @@ import os
 import re
 import time
 
+from ..paths import notes_for
 from ..plugin import Finding, Plugin, register
 from ..signatures import scan
 from ..util import clip, in_domain
@@ -106,6 +107,7 @@ GITHUB_TTL = 24 * 3600
 GITHUB_PAGE_PAUSE = 6.5     # code search allows about 10 requests a minute
 GITHUB_PAGES = 2
 GITHUB_MAX_REPOS = 50
+GITHUB_MAX_FILES = 25       # config-like file links kept per repo
 VENDORED = re.compile(r"(^|/)(site-packages|node_modules|\.?venv|[a-z]*venv|vendor|third_party|\.git)/", re.I)
 CONFIG_LIKE = re.compile(
     r"(\.env|config|credential|secret|settings|\.pem$|\.key$|id_rsa|\.npmrc|\.pgpass|\.tfvars|docker-compose|"
@@ -121,7 +123,7 @@ class GithubCodeSearch(Plugin):
         "worth a look. Sends the domain to GitHub. Needs a free GITHUB_TOKEN. Keeps only repo, path, hostnames and "
         "addresses, never the code itself."
     )
-    categories = ("infrastructure", "subdomains", "emails")
+    categories = ("infrastructure", "subdomains", "emails", "exposures")
     needs_any = ("domain",)
     order = 37
 
@@ -148,13 +150,14 @@ class GithubCodeSearch(Plugin):
         for hit in self._search(ctx, d):
             if VENDORED.search(hit["path"]):        # copies of other people's libraries say nothing about the client
                 continue
-            repo = repos.setdefault(hit["repo"], {"paths": [], "url": hit["url"], "config": False})
+            repo = repos.setdefault(hit["repo"], {"paths": [], "url": hit["url"], "config": False, "files": []})
             repo["paths"].append(hit["path"])
+            repo["files"].append((hit["url"], hit["path"]))
             repo["config"] = repo["config"] or bool(CONFIG_LIKE.search(hit["path"]))
             for h in hit["hosts"]:
-                hosts.setdefault(h, hit["repo"])
+                hosts.setdefault(h, (hit["repo"], hit["url"]))
             for e in hit["emails"]:
-                emails.setdefault(e, hit["repo"])
+                emails.setdefault(e, (hit["repo"], hit["url"]))
         for name, r in sorted(repos.items())[:GITHUB_MAX_REPOS]:
             sample = ", ".join(r["paths"][:3]) + (f" and {len(r['paths']) - 3} more" if len(r["paths"]) > 3 else "")
             n = len(r["paths"])
@@ -162,13 +165,18 @@ class GithubCodeSearch(Plugin):
             if r["config"]:
                 note += " Includes config-like files, worth a look by hand."
             yield Finding("infrastructure", f"Public code mentions {d}: {name}", url=r["url"],
-                          confidence=55 if r["config"] else 40, notes=clip(note, 900))
-        for h, repo in sorted(hosts.items()):
+                          confidence=55 if r["config"] else 40, notes=clip(note, 900),
+                          evidence=tuple((u, f"{name}/{path}") for u, path in r["files"] if u))
+            for u, path in r["files"][:GITHUB_MAX_FILES]:           # the file links themselves, not only how many there were
+                if u and CONFIG_LIKE.search(path):
+                    yield Finding("exposures", u, url=u, confidence=45,
+                                  notes=notes_for("secrets", f"Config-like file in public code ({name}) that mentions {d}. Open it by hand."))
+        for h, (repo, link) in sorted(hosts.items()):
             if h != d:
-                yield Finding("subdomains", h, url=f"https://github.com/{repo}", confidence=55,
+                yield Finding("subdomains", h, url=link or f"https://github.com/{repo}", confidence=55,
                               notes=f"Named in public code in {repo}.")
-        for e, repo in sorted(emails.items()):
-            yield Finding("emails", e, url=f"https://github.com/{repo}", confidence=55,
+        for e, (repo, link) in sorted(emails.items()):
+            yield Finding("emails", e, url=link or f"https://github.com/{repo}", confidence=55,
                           notes=f"Named in public code in {repo}.")
 
     def _search(self, ctx, d):

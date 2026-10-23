@@ -22,6 +22,7 @@ class Finding:
     url: str | None = None
     confidence: int = 50
     notes: str | None = None
+    evidence: tuple = ()     # more supporting links as (url, note) pairs, besides url
 
 
 @dataclass
