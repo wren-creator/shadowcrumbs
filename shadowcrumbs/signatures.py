@@ -8,7 +8,10 @@ import re
 SIGNATURES = [
     # Mainframe and midrange
     ("IBM i (AS/400)", r"\b(?:AS/?400|iSeries|IBM i|System i|i5/OS|OS/400)\b"),
-    ("z/OS mainframe", r"\bz/OS\b|\b[Mm]ainframe\b"),
+    ("z/OS mainframe", r"\bz/OS\b"),
+    # The bare word is not proof of z/OS: a web emulator, an AS/400 or a Unisys box all get called a mainframe.
+    # Skipped when the same text names z/OS, so one job post does not report both.
+    ("Mainframe (platform not stated)", r"(?s)^(?!.*\bz/OS\b).*?\b[Mm]ainframe\b"),
     ("z/TPF", r"\bz/?TPF\b|\bTPF\b"),
     ("RACF", r"\bRACF\b"),
     ("CICS", r"\bCICS\b"),

@@ -189,3 +189,14 @@ def test_personal_plugin_folder_loads_alongside_the_normal_one(tmp_path, monkeyp
     plugin.load_plugins()
     assert "private_thing_test" in plugin.REGISTRY
     plugin.REGISTRY.pop("private_thing_test")
+
+
+def test_the_word_mainframe_alone_is_not_called_z_os():
+    """Found in a real report: a web emulator titled 'Gibson Mainframe' came out as 'z/OS mainframe' at 75."""
+    from shadowcrumbs.signatures import scan
+    names = lambda text: [n for n, _ in scan(text)]
+    assert names("Gibson Mainframe Web Edition cloudflare") == ["Mainframe (platform not stated)"]
+    assert names("We run z/OS on our mainframe") == ["z/OS mainframe"]          # one post does not report both
+    assert names("mainframe operators wanted, z/OS and RACF") == ["z/OS mainframe", "RACF"]
+    assert names("Experience with z/OS") == ["z/OS mainframe"]
+    assert names("an ordinary web server") == []

@@ -407,6 +407,11 @@ class Store:
             return json.loads(row["results"])
         return None
 
+    def cache_clear(self):
+        """Forget every saved search answer for this engagement. Returns how many there were. Findings are not touched."""
+        with self.conn() as c:
+            return c.execute("DELETE FROM search_cache").rowcount
+
     def cache_put(self, query, results):
         with self.conn() as c:
             c.execute(
