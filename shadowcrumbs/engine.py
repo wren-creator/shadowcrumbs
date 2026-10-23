@@ -94,7 +94,7 @@ def execute(slug, tier, names=None, progress=None, domains=None):
         else:
             try:
                 for f in p.run(ctx):
-                    if store.add_finding(f.category, f.value, p.name, p.tier, f.url, f.confidence, f.notes):
+                    if store.add_finding(f.category, f.value, p.name, p.tier, f.url, f.confidence, f.notes, f.evidence):
                         found += 1
             except Exception as e:  # one bad source must not stop the rest
                 status, err = ("partial" if found else "error"), f"{type(e).__name__}: {e}"
