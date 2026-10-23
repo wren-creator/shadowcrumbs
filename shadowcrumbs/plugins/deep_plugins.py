@@ -29,6 +29,20 @@ def dns_lookup(name, rtype):
         return [], "error"
 
 
+def dmarc_lookup(d):
+    """The DMARC record that applies to d and the name it was found on. A receiver uses the host's own _dmarc record
+    and falls back to its parent domain's (RFC 7489, section 6.6.3), so a subdomain with none of its own is not
+    unprotected. Stops before a bare top level domain."""
+    labels = d.lower().rstrip(".").split(".")
+    for i in range(max(len(labels) - 1, 1)):
+        name = ".".join(labels[i:])
+        records, _ = dns_lookup(f"_dmarc.{name}", "TXT")
+        records = [t.strip('"') for t in records if "v=DMARC1" in t]
+        if records:
+            return records, name
+    return [], None
+
+
 def dns_check():
     """Can this machine resolve names at all? Asks about example.com, never the client."""
     records, status = dns_lookup("example.com", "A")
@@ -72,15 +86,20 @@ class DnsRecords(Plugin):
                 note = "Neutral policy, effectively no protection."
             yield Finding("infrastructure", f"SPF: {clip(s, 200)}", confidence=90, notes=note)
 
-        dmarc, _ = dns_lookup(f"_dmarc.{d}", "TXT")
-        dmarc = [t.strip('"') for t in dmarc if "v=DMARC1" in t]
+        dmarc, found_on = dmarc_lookup(d)
         if not dmarc:
             yield Finding("infrastructure", "DMARC record missing", confidence=90,
-                          notes="No policy telling receivers to reject spoofed mail.")
+                          notes=f"No policy telling receivers to reject spoofed mail, on {d} or any parent domain.")
         for rec in dmarc:
+            inherited = found_on != d.lower().rstrip(".")
+            tags = {k.strip().lower(): v.strip().lower() for k, _, v in (p.partition("=") for p in rec.split(";")) if k.strip()}
+            # a subdomain that inherits the record is held to sp= when there is one, p= otherwise
+            tag = "sp" if inherited and tags.get("sp") else "p"
             note = "Policy enforced."
-            if "p=none" in rec.replace(" ", ""):
-                note = "Policy is p=none, monitor only. Spoofed mail is still delivered."
+            if tags.get(tag) == "none":
+                note = f"Policy is {tag}=none, monitor only. Spoofed mail is still delivered."
+            if inherited:
+                note = f"Inherited from {found_on}. " + note
             yield Finding("infrastructure", f"DMARC: {clip(rec, 200)}", confidence=90, notes=note)
 
         for t in txt:

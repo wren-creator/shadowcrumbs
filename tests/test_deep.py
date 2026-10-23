@@ -308,3 +308,40 @@ def test_doc_content_survives_zip_bombs_and_broken_files(store):
     out = run("doc_content", store, FakeHttp(files={urls[0]: bomb.getvalue(), urls[1]: b"%PDF-1.4 nope",
                                                     urls[2]: b"Contact: Kim Lee\n"}))
     assert [f.value for f in out] == ["Kim Lee"]
+
+
+def test_a_subdomain_inherits_the_parent_dmarc_record_instead_of_being_called_unprotected(monkeypatch):
+    """Found in a real report: the apex had p=none, yet the intranet and remote runs reported 'DMARC record missing'."""
+    stub_dns(monkeypatch, {("_dmarc.acme-demo.test", "TXT"): (['"v=DMARC1; p=none;"'], "ok")})
+    store = Store.create("Deep", company="Acme Demo Corp", domain="intranet.acme-demo.test")
+    out = {f.value: f for f in run("dns_records", store)}
+    assert "DMARC record missing" not in out
+    dmarc = next(f for v, f in out.items() if v.startswith("DMARC:"))
+    assert dmarc.notes.startswith("Inherited from acme-demo.test.") and "monitor only" in dmarc.notes
+
+
+def test_an_inherited_record_is_judged_by_sp_when_it_has_one(monkeypatch):
+    stub_dns(monkeypatch, {("_dmarc.acme-demo.test", "TXT"): (['"v=DMARC1; p=none; sp=reject"'], "ok")})
+    sub = {f.value: f for f in run("dns_records", Store.create("A", company="Acme", domain="portal.acme-demo.test"))}
+    assert "monitor only" not in next(f for v, f in sub.items() if v.startswith("DMARC:")).notes     # subdomains follow sp=reject
+    apex = {f.value: f for f in run("dns_records", Store.create("B", company="Acme", domain="acme-demo.test"))}
+    assert "p=none, monitor only" in next(f for v, f in apex.items() if v.startswith("DMARC:")).notes  # the apex follows p=none
+
+
+def test_sp_none_is_not_mistaken_for_p_none(monkeypatch):
+    stub_dns(monkeypatch, {("_dmarc.acme-demo.test", "TXT"): (['"v=DMARC1; sp=none; p=reject"'], "ok")})
+    out = {f.value: f for f in run("dns_records", Store.create("A", company="Acme", domain="acme-demo.test"))}
+    assert "monitor only" not in next(f for v, f in out.items() if v.startswith("DMARC:")).notes
+
+
+def test_dmarc_missing_everywhere_names_the_host(monkeypatch):
+    stub_dns(monkeypatch, {})
+    out = {f.value: f for f in run("dns_records", Store.create("A", company="Acme", domain="intranet.acme-demo.test"))}
+    assert "intranet.acme-demo.test" in out["DMARC record missing"].notes
+
+
+def test_the_parent_search_stops_before_the_top_level_domain(monkeypatch):
+    asked = []
+    monkeypatch.setattr(dp, "dns_lookup", lambda name, rtype: (asked.append(name) or ([], "empty")))
+    assert dp.dmarc_lookup("a.b.acme-demo.test") == ([], None)
+    assert asked == ["_dmarc.a.b.acme-demo.test", "_dmarc.b.acme-demo.test", "_dmarc.acme-demo.test"]   # never _dmarc.test
