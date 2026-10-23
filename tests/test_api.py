@@ -175,3 +175,31 @@ def test_run_covers_scoped_subdomains_and_refuses_others(client):
     st = wait_idle(client, slug)
     assert st["summary"]["plugins"] and st["summary"]["plugins"][-1]["name"] == "emails_search @ dev.acme-demo.test"
     assert [r["plugin"] for r in client.get(run).json()["runs"]] == ["emails_search @ dev.acme-demo.test", "emails_search"]
+
+
+def test_clearing_the_search_cache_forgets_answers_and_nothing_else(client):
+    from shadowcrumbs.store import Store
+    slug = make(client)
+    s = Store(slug)
+    s.cache_put("site:acme-demo.test", [{"title": "t", "url": "https://acme-demo.test/", "snippet": ""}])
+    s.cache_put("another query", [])
+    assert s.cache_get("site:acme-demo.test", 10**9)
+    r = client.delete(f"/api/engagements/{slug}/search-cache")
+    assert r.status_code == 200 and r.json() == {"cleared": 2}
+    assert s.cache_get("site:acme-demo.test", 10**9) is None and s.cache_get("another query", 10**9) is None
+    assert client.get(f"/api/engagements/{slug}").status_code == 200       # the engagement itself is untouched
+    assert client.delete(f"/api/engagements/{slug}/search-cache").json() == {"cleared": 0}
+
+
+def test_the_search_cache_is_not_cleared_during_a_run(client, monkeypatch):
+    from shadowcrumbs import engine
+    from shadowcrumbs.store import Store
+    slug = make(client)
+    Store(slug).cache_put("q", [])
+    monkeypatch.setitem(engine.STATE, slug, {"state": "running"})
+    assert client.delete(f"/api/engagements/{slug}/search-cache").status_code == 409
+    assert Store(slug).cache_get("q", 10**9) == []                          # still there
+
+
+def test_clearing_the_cache_of_an_unknown_engagement_is_a_404(client):
+    assert client.delete("/api/engagements/no-such-engagement/search-cache").status_code == 404

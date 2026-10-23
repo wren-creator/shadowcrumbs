@@ -243,6 +243,11 @@ function renderControls() {
         onclick: () => startRun(null, [e.domain, ...e.scope_domains.map((d) => d.domain)]),
       }, `Run all, plus ${e.scope_domains.length} subdomain${e.scope_domains.length === 1 ? "" : "s"}`),
       el("span", { class: "spacer" }),
+      el("button", {
+        class: "btn", disabled: running,
+        title: "Searches are saved for a week. Forget them so the next run asks the search engines again.",
+        onclick: clearSearchCache,
+      }, "Clear search cache"),
       exportLink("md", "Export MD"), exportLink("pdf", "Export PDF"), exportLink("json", "Export JSON")),
     el("div", { class: statusClass, role: "status" }, statusText),
     state.notice && el("div", { class: state.notice.kind === "error" ? "error" : "warn" }, state.notice.text),
@@ -441,6 +446,17 @@ async function removeScopeDomain(domain) {
     state.notice = { kind: "error", text: err.message };
     renderControls();
   }
+}
+
+async function clearSearchCache() {
+  if (!confirm("Forget every saved search answer for this engagement?\n\nFindings you already have are kept. The next search run asks the search engines again, which uses live queries (Brave credits, and time).")) return;
+  try {
+    const r = await api(`/api/engagements/${state.active}/search-cache`, { method: "DELETE" });
+    state.notice = { kind: "warn", text: `Forgot ${r.cleared} saved search answer${r.cleared === 1 ? "" : "s"}. The next search run asks the engines again.` };
+  } catch (err) {
+    state.notice = { kind: "error", text: err.message };
+  }
+  renderControls();
 }
 
 async function startRun(names, domains) {

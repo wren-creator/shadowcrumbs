@@ -208,6 +208,18 @@ def start_run(slug: str, body: RunRequest):
         raise HTTPException(409, str(e)) from None
 
 
+@app.delete("/api/engagements/{slug}/search-cache")
+def clear_search_cache(slug: str):
+    """Searches are cached for a week, so a re-run never asks the engines again. This makes the next run ask afresh,
+    for example after a Brave key started loading. It costs live queries, and findings already found are kept."""
+    s = _store(slug)
+    if engine.status(slug)["state"] == "running":
+        raise HTTPException(409, "a run is in progress")
+    cleared = s.cache_clear()
+    log.logger().info("[%s] search cache cleared: %s saved answers forgotten", slug, cleared)
+    return {"cleared": cleared}
+
+
 @app.get("/api/engagements/{slug}/runs")
 def list_runs(slug: str):
     s = _store(slug)
