@@ -1,22 +1,15 @@
 """Example user plugin. Drop a file like this in plugins_user/ and it shows up in the dashboard.
 
 This one asks the Internet Archive which URLs it has ever seen on the domain and keeps the
-ones that smell interesting: admin panels, backups, configs, old logins.
+ones that smell interesting: admin panels, backups, configs, old logins. Each one is reported under Exposed
+Paths and Files with its full URL, so the report lists them and not just how many there were.
 """
-import re
 import time
-from urllib.parse import urlparse
 
 import requests
 
+from shadowcrumbs.paths import classify, notes_for
 from shadowcrumbs.plugin import Finding, Plugin, register
-from shadowcrumbs.util import clip
-
-INTERESTING = re.compile(
-    r"(admin|login|logon|signin|portal|backup|\.bak|\.old|\.sql|\.zip|\.env|\.git|config|phpinfo|"
-    r"wp-admin|jenkins|grafana|kibana|swagger|/api/|test|staging|dev)",
-    re.I,
-)
 
 
 RETRY_STATUS = {429, 502, 503, 504}   # the Archive says "busy", so wait and ask again
@@ -29,7 +22,7 @@ class WaybackUrls(Plugin):
     name = "wayback_urls"
     tier = "deep"
     description = "Historical URLs from the Internet Archive that look like admin pages, backups or configs."
-    categories = ("infrastructure",)
+    categories = ("exposures",)
     needs_any = ("domain",)
     order = 35
 
@@ -85,10 +78,10 @@ class WaybackUrls(Plugin):
         hits = 0
         for row in rows[1:]:  # first row is the header
             original = row[0]
-            u = urlparse(original)
-            if INTERESTING.search(f"{u.path}?{u.query}"):      # the path, never the host: "dev" must not match devcorp.com
+            kind = classify(original)             # looks at the path, never the host: "dev" must not match devcorp.com
+            if kind and kind[0] != "file":        # plain documents are the documents search's job
                 hits += 1
-                yield Finding("infrastructure", f"Archived URL: {clip(original, 200)}", url=original,
-                              confidence=35, notes="Seen by the Internet Archive. May no longer exist.")
+                yield Finding("exposures", original, url=original, confidence=35,
+                              notes=notes_for(kind[0], "Seen by the Internet Archive. May no longer exist."))
                 if hits >= 150:
                     break

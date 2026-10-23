@@ -12,6 +12,7 @@ CATEGORIES = [
     ("tech", "Tech Stack"),
     ("subdomains", "Subdomains"),
     ("infrastructure", "Infrastructure"),
+    ("exposures", "Exposed Paths and Files"),
 ]
 CATEGORY_KEYS = [k for k, _ in CATEGORIES]
 

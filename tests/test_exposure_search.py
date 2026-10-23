@@ -73,6 +73,19 @@ def test_the_targets_own_page_may_list_example_names_but_never_templates():
     assert {f.value for f in found if f.category == "emails"} == {"jane.doe@acme.test"}
 
 
+def test_indexed_admin_and_login_pages_land_under_exposures_with_the_full_url():
+    table = {
+        "inurl:admin": [Result("Admin Login", "https://www.acme.test/admin/login", ""),
+                        Result("someone else's admin", "https://other.test/admin", "")],
+        "intitle:\"index of\"": [Result("Index of /backups", "https://www.acme.test/backups/", "")],
+    }
+    _, found = run(table, {"company": "Acme", "domain": "acme.test"})
+    exp = {(f.value, f.notes.split("]")[0] + "]") for f in found if f.category == "exposures"}
+    assert ("https://www.acme.test/admin/login", "[Admin page]") in exp
+    assert ("https://www.acme.test/backups/", "[Open directory listing]") in exp
+    assert not any(f.category == "exposures" and "other.test" in f.value for f in found)
+
+
 def test_a_page_that_only_mentions_the_client_is_not_their_cloud_storage():
     table = {"s3.amazonaws.com": [Result("Retail Management, Acme case study", "https://s3.amazonaws.com/lumenlearning/ch4", "Acme"),
                                   Result("backups", "https://acme-backups.s3.amazonaws.com/db", "")]}

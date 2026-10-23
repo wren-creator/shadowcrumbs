@@ -35,6 +35,8 @@ class FakeHttp:
             status_code, headers = 200, {}
             def json(self): return {"results": []}
             def raise_for_status(self): pass
+            def iter_content(self, n): return iter(())
+            def close(self): pass
         return Empty()
 
 
@@ -153,6 +155,47 @@ def test_http_probe_headers_and_banners(store):
     assert ("tech", "X-AspNet-Version: 4.0.30319") in out
     assert ("tech", "Citrix") in out
     assert ("infrastructure", "vpn.acme-demo.test responds 200 over https") in out
+
+
+class PathResp:
+    def __init__(self, status=404, body=b""):
+        self.status_code, self._body = status, body
+
+    def iter_content(self, n):
+        return iter([self._body]) if self._body else iter(())
+
+    def close(self):
+        pass
+
+
+def test_exposure_probe_reports_full_urls_classified_by_what_they_expose(store):
+    store.add_finding("subdomains", "admin.acme-demo.test", "t", "search")
+
+    class Http(FakeHttp):
+        def probe(self, host):
+            return {"scheme": "https"}      # every host answers, so paths are tried against both
+
+        def get(self, url, **kw):
+            answers = {
+                "https://acme-demo.test/.git/config": PathResp(200, b"[core]\n\trepositoryformatversion"),
+                "https://acme-demo.test/backup.sql": PathResp(200, b"-- MySQL dump"),
+                "https://admin.acme-demo.test/admin/": PathResp(200, b"<html><body>Welcome</body></html>"),  # a custom 404 page
+            }
+            return answers.get(url, PathResp(404))
+
+    out = {(f.category, f.value): f for f in run("exposure_probe", store, Http())}
+    assert out[("exposures", "https://acme-demo.test/.git/config")].notes.startswith("[Exposed source control]")
+    assert out[("exposures", "https://acme-demo.test/backup.sql")].notes.startswith("[Exposed backup]")
+    # a 200 that is really a generic HTML page, not the file itself, is noise and must not be reported
+    assert ("exposures", "https://admin.acme-demo.test/admin/") not in out
+
+
+def test_exposure_probe_skips_a_host_that_answers_nothing(store):
+    class Http(FakeHttp):
+        def probe(self, host):
+            return None
+
+    assert run("exposure_probe", store, Http()) == []
 
 
 def make_docx(creator="Dana Smith", last="dsmith", app="Microsoft Office Word", ver="16.0000"):
