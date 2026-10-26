@@ -17,10 +17,8 @@ In order. Items marked **needs a key** can wait until there is one, so skip down
 
 Wayback files (`.well-known/*`, sitemap, feeds, `index.xml`) are fixed. Still to build, biggest client value first:
 
-- [ ] Port scan of the root and each live host (21,23,992,175,443,448,2809,3270,10007,50000), the mainframe ports are the point for this client
 - [ ] Subdomain takeover check (dangling CNAMEs against known provider fingerprints)
-- [ ] AXFR zone transfer attempt against each name server, report refused or open
-- [ ] DNS hygiene: no CAA record, DNSSEC unsigned, SPF policy called out (we only report SPF and DMARC today)
+- [ ] DNS hygiene extras: a soft fail or neutral SPF policy as its own finding (today it is only a note on the SPF line), follow SPF includes to count lookups exactly, check each name server answers
 - [ ] WHOIS extras: registrar lock status, transfer lock, abuse contact
 - [ ] ASN and netblock per IP, plus geolocation, grouped by host
 - [ ] Per-host attack surface roll-up in the report, and an executive summary with a remediation order
@@ -34,6 +32,7 @@ Wayback files (`.well-known/*`, sitemap, feeds, `index.xml`) are fixed. Still to
 
 - [ ] Measure the hit rate of the new exposure queries on an authorised domain from the new network, then keep what earns its 8 seconds and drop the rest
 - [ ] Spider extras: HTML comments that leak (todo notes, addresses), JavaScript files for endpoints, and following the sitemap.xml it finds
+- [ ] Port scan extras: TLS certificate details on open TLS ports, a real TN3270 handshake on 23, 992 and 3270 to name the host, and a CIDR target for an IP range with a hard cap
 - [ ] Snippet-free extractor for custom sources, so backup and config file searches (`ext:bak`, `ext:sql`) can be added without keeping text that might hold a secret
 
 - [ ] Vulners plugin: turn product and version strings from the tech findings into known CVEs
@@ -52,7 +51,10 @@ The full list of candidate sources, and where each one fits, is in [docs/DATA-SO
 
 ## Done
 
-- [x] Site spider (2026-10-26): follows links two clicks deep on the domain and every live subdomain, inside the domain only. Reports linked documents (then opened and read by doc_metadata and doc_content), new hosts, ports named in links, contact addresses, login and upload forms. First live run on sighberbank.com found passwords.xlsx, a remote access guide and a mainframe on port 23 linked as GUEST login, all reached from the intranet front page
+- [x] Zone transfer and DNS hygiene (2026-10-26): `zone_transfer` asks every name server for the zone (AXFR) and reports refused, open or untried, an open one also feeds its host names into the subdomains. `dns_hygiene` reports no CAA, DNSSEC unsigned or half set up, more than one SPF record, SPF over ten lookups or using ptr, a single name server. Live on sighberbank.com: no CAA, no DNSSEC, all four name servers refused AXFR
+- [x] Port scan (2026-10-26): TCP connect scan of the public addresses the domain and subdomains resolve to, mainframe ports first (23, 992, 3270, 448, 446, 2809, 1414, 50000 and more), banner listening only, nothing sent, private addresses skipped, `SHADOWCRUMBS_PORTS` to change the list. Live on sighberbank.com: only 80 and 443 (and 9080 and 9443 on the remote host), no telnet or TN3270 reachable, same as Ezrecon
+
+- [x] Site spider (2026-10-26): follows links six clicks deep (two at first, raised 2026-10-26) on the domain and every live subdomain, inside the domain only. Reports linked documents (then opened and read by doc_metadata and doc_content), new hosts, ports named in links, contact addresses, login and upload forms. First live run on sighberbank.com found passwords.xlsx, a remote access guide and a mainframe on port 23 linked as GUEST login, all reached from the intranet front page
 
 - [x] Subdomain discovery beyond crt.sh (2026-10-26): CertSpotter, HackerTarget, OTX and JLDC plus a wordlist brute force with mainframe names and wildcard DNS handling. Tested with fakes, not yet run live on sighberbank.com
 - [x] Wayback well-known files, sitemaps, feeds and data files are kept, and the probe asks for them (2026-10-26)

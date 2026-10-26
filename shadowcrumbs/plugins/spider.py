@@ -64,7 +64,7 @@ class SiteSpider(Plugin):
     name = "site_spider"
     tier = "deep"
     description = (
-        "Follows links on the domain and every live subdomain, two clicks deep, and reports what the pages give away: "
+        "Follows links on the domain and every live subdomain, six clicks deep, and reports what the pages give away: "
         "linked documents (which are then opened and read), other hosts, ports named in links, contact addresses, "
         "login and upload forms. Never leaves the client's domain. One GET per page, with a page limit."
     )

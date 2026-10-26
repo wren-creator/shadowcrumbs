@@ -23,7 +23,10 @@ MAX_RESOLVE_HOSTS = 200
 MAX_BRUTE_WORDS = 2000
 MAX_SPIDER_PAGES = 200
 MAX_SPIDER_PAGES_PER_HOST = 30
-MAX_SPIDER_DEPTH = 2
+MAX_SPIDER_DEPTH = 6
+MAX_PORTSCAN_IPS = 20
+MAX_PORTS = 200
+MAX_AXFR_NAMES = 500
 
 
 def data_dir() -> Path:
@@ -205,3 +208,21 @@ def subdomain_wordlist() -> Path:
     """The guess list for subdomain_brute. Point SHADOWCRUMBS_SUBDOMAIN_WORDLIST at a bigger one if a job needs it."""
     raw = os.environ.get("SHADOWCRUMBS_SUBDOMAIN_WORDLIST", "").strip()
     return Path(raw).expanduser() if raw else ROOT / "source_packs" / "subdomains.txt"
+
+
+# Mainframe ports first (telnet, TN3270, DB2, MQ, WebSphere), then the usual exposed services.
+DEFAULT_PORTS = (21, 22, 23, 25, 80, 110, 143, 175, 443, 445, 446, 448, 992, 993, 995, 1414, 1433, 1521, 2809,
+                 3270, 3306, 3389, 5432, 5900, 8080, 8443, 9080, 9443, 10007, 50000)
+
+
+def scan_ports() -> list:
+    """The TCP ports port_scan tries. SHADOWCRUMBS_PORTS (comma separated) replaces the default list, bad entries are dropped."""
+    raw = os.environ.get("SHADOWCRUMBS_PORTS", "").strip()
+    if not raw:
+        return list(DEFAULT_PORTS)
+    ports = []
+    for part in raw.split(","):
+        part = part.strip()
+        if part.isdigit() and 1 <= int(part) <= 65535 and int(part) not in ports:
+            ports.append(int(part))
+    return (ports or list(DEFAULT_PORTS))[:MAX_PORTS]
