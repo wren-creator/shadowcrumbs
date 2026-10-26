@@ -20,6 +20,7 @@ MAX_DOWNLOAD_BYTES = 10 * 1024 * 1024
 MAX_DOCS_PER_RUN = 25
 MAX_PROBE_HOSTS = 60
 MAX_RESOLVE_HOSTS = 200
+MAX_BRUTE_WORDS = 2000
 
 
 def data_dir() -> Path:
@@ -195,3 +196,9 @@ def allowed_hosts() -> set[str]:
     Add more (a reverse proxy name, say) with SHADOWCRUMBS_ALLOWED_HOSTS=name1,name2."""
     extra = os.environ.get("SHADOWCRUMBS_ALLOWED_HOSTS", "")
     return {"127.0.0.1", "localhost", "::1"} | {h.strip().lower() for h in extra.split(",") if h.strip()}
+
+
+def subdomain_wordlist() -> Path:
+    """The guess list for subdomain_brute. Point SHADOWCRUMBS_SUBDOMAIN_WORDLIST at a bigger one if a job needs it."""
+    raw = os.environ.get("SHADOWCRUMBS_SUBDOMAIN_WORDLIST", "").strip()
+    return Path(raw).expanduser() if raw else ROOT / "source_packs" / "subdomains.txt"
