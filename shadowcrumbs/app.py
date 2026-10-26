@@ -364,7 +364,7 @@ def admin_logs(lines: int = 300, level: Literal["debug", "info", "warning", "err
 
 
 @app.get("/api/engagements/{slug}/export")
-def export(slug: str, format: Literal["md", "json", "pdf"] = "md"):
+def export(slug: str, format: Literal["md", "json", "pdf", "html"] = "md"):
     s = _store(slug)
     fn, mime, ext = EXPORTERS[format]
     body = fn(s)
