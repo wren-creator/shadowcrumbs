@@ -104,3 +104,13 @@ def test_the_host_name_never_makes_a_url_interesting(mod):
     rows = [["original"], ["http://devcorp.test/about"], ["http://devcorp.test/staging/login"], ["https://admin.devcorp.test/"]]
     found, _ = run(mod, Http(Resp(200, rows)))
     assert [f.url for f in found] == ["http://devcorp.test/staging/login"]
+
+
+def test_well_known_files_feeds_and_data_files_are_kept_but_a_pdf_is_not(mod):
+    urls = ["/.well-known/ai-plugin.json", "/.well-known/assetlinks.json", "/sitemap.xml", "/feed.xml",
+            "/index.xml", "/export/users.csv", "/reports/q3.pdf", "/about"]
+    found, _ = run(mod, Http(Resp(200, [["original"]] + [[f"https://acme.test{u}"] for u in urls])))
+    assert [f.value.split("acme.test")[1] for f in found] == urls[:6]
+    assert found[0].notes.startswith("[Well-known metadata file]")
+    assert found[2].notes.startswith("[Sitemap or feed]")
+    assert found[5].notes.startswith("[Data or export file]")

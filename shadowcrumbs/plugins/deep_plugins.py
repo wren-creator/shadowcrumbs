@@ -382,6 +382,8 @@ PROBE_PATHS = (
     "/admin/", "/administrator/", "/wp-admin/", "/phpmyadmin/", "/manager/html",
     "/server-status", "/server-info", "/actuator/health", "/phpinfo.php",
     "/swagger-ui.html", "/api-docs", "/graphql",
+    "/.well-known/openid-configuration", "/.well-known/security.txt", "/.well-known/ai-plugin.json",
+    "/.well-known/assetlinks.json", "/robots.txt", "/sitemap.xml", "/feed.xml", "/atom.xml",
 )
 
 

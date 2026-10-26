@@ -46,3 +46,13 @@ def test_a_bad_url_does_not_raise():
 def test_the_most_serious_match_wins_when_several_apply():
     # a backup living under an admin path should still read as a backup, not get swallowed by admin
     assert classify("https://acme.test/admin/backup.sql")[0] == "backup"
+
+
+def test_well_known_files_sitemaps_and_feeds_are_recognized():
+    for u in ("https://acme.test/.well-known/ai-plugin.json", "https://acme.test/.well-known/assetlinks.json",
+              "https://acme.test/.well-known/gpc.json", "https://acme.test/.well-known/openid-configuration"):
+        assert classify(u)[0] == "wellknown", u
+    for u in ("https://acme.test/sitemap.xml", "https://acme.test/atom.xml", "https://acme.test/feed.xml",
+              "https://acme.test/feeds/all.atom.xml", "https://acme.test/index.xml", "https://acme.test/robots.txt"):
+        assert classify(u)[0] == "discovery", u
+    assert classify("https://acme.test/.well-known/security.txt")[0] == "debug"   # unchanged, still the more serious label

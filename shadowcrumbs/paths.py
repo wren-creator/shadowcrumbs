@@ -27,9 +27,15 @@ KINDS = [
         r"(/log-?in\b|/log-?on\b|/sign-?in\b|/signon|/sso(/|$)|/auth(/|$)|/oauth|/saml|/owa(/|$)|/remote(/|$)|/vpn(/|$)|"
         r"/portal(/|$)|/webmail|/citrix|/global-protect|/dana-na|/my\.policy|/rdweb|/ecp(/|$)|/account/login|/user/login)", re.I)),
     ("api_docs", "API docs or schema", re.compile(r"(/swagger|/api-docs|/openapi\.(json|ya?ml)|/graphql|/graphiql|/redoc)", re.I)),
+    # /.well-known/ files publish how the site is wired: OIDC endpoints, app links, AI plugin manifests, policy files
+    ("wellknown", "Well-known metadata file", re.compile(r"/\.well-known/[^/]+", re.I)),
+    # sitemaps and feeds list every URL the owner wants found, and often a few they forgot about
+    ("discovery", "Sitemap or feed", re.compile(
+        r"(/sitemap[^/]*\.xml(\.gz)?$|/robots\.txt$|/(atom|rss|feed|index)\.xml$|/feeds?/[^/]+\.(xml|atom|rss)$|/rss/?$|/feed/?$)", re.I)),
 ]
 LABELS = {k: label for k, label, _ in KINDS}
 LABELS["file"] = "Exposed file"
+LABELS["data"] = "Data or export file"
 
 # a page title that gives an open directory away even when the URL does not
 LISTING_TITLE = re.compile(r"^\s*index of\s*/|^\s*directory listing for\s*/", re.I)
