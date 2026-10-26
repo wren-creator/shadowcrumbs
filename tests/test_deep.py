@@ -128,6 +128,24 @@ def test_crtsh_dedupes_and_stays_in_scope(store):
     assert {f.value for f in run("crtsh", store, http)} == {"vpn.acme-demo.test", "dev.acme-demo.test"}
 
 
+def test_crtsh_retries_a_502_then_succeeds(store, monkeypatch):
+    import requests
+    monkeypatch.setattr(dp.time, "sleep", lambda s: None)
+    calls = []
+
+    class Flaky(FakeHttp):
+        def get_json(self, url, timeout=None):
+            calls.append(url)
+            if len(calls) < 3:
+                resp = requests.Response()
+                resp.status_code = 502
+                raise requests.HTTPError("502 Server Error: Bad Gateway", response=resp)
+            return [{"name_value": "vpn.acme-demo.test", "issuer_name": "x"}]
+
+    assert {f.value for f in run("crtsh", store, Flaky())} == {"vpn.acme-demo.test"}
+    assert len(calls) == 3
+
+
 def test_takeover_detection(store, monkeypatch):
     store.add_finding("subdomains", "old.acme-demo.test", "t", "search")
     store.add_finding("subdomains", "ok.acme-demo.test", "t", "search")
