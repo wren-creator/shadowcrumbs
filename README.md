@@ -18,10 +18,10 @@ Licensed GPL-3.0, see [LICENSE](LICENSE). No warranty, as the licence says.
 ## Run it
 
 ```bash
-./start.sh              # background, then open http://127.0.0.1:8470
-./start.sh --demo       # fixture data, no network (see below)
-./start.sh --status     # is it up?
-./stop.sh               # stop it
+./shadowcrumbs.sh start           # SearXNG (if Docker is up) and the dashboard, then open http://127.0.0.1:8470
+./shadowcrumbs.sh start --demo    # fixture data, no network (see below)
+./shadowcrumbs.sh status          # is it up?
+./shadowcrumbs.sh stop            # stop it
 ```
 
 To run the whole stack, use the front door. It starts your own SearXNG for you when Docker is running, waits until it answers, then starts the dashboard pointed at it:
@@ -44,7 +44,7 @@ If Docker is missing or not running, or the SearXNG port is taken, a plain `star
 
 **Balancing (optional).** By default the first engine that is up takes every query. Set `SHADOWCRUMBS_SEARCH_BALANCE=1` and the engines that have a share take turns in proportion to it: Brave 3, SearXNG 2, and DuckDuckGo and Exa 0, which means reserve, asked only when everything with a share is down. Change the shares with `SHADOWCRUMBS_SEARCH_WEIGHTS="brave=3,searxng=1,ddg=1"`. An engine that is throttled is replaced for that query and sits out `SHADOWCRUMBS_ENGINE_COOLDOWN` seconds (default 300), then rejoins. One that refused your key, ran out of credits or hit a DuckDuckGo block stays out for the rest of the run. Each engine keeps its own pace, so Brave is not held to SearXNG's slower one. The cache is shared whichever engine answered, so a re-run still costs nothing. Honest trade-off: it is slower with SearXNG in the mix (SearXNG keeps the long default pace, so four queries took 10 seconds in a live check where Brave alone would take about 5), and the answers differ. On 2026-10-22 from this network Brave returned 39 results and all were on the site asked for, while SearXNG's two answers kept 4 of 21 after the off-target filter. So balancing spreads the load and the quota, it does not improve the results. The run summary and the app log say how many queries each engine answered. Some engines ignore a `site:` restriction and answer with unrelated pages (checked 2026-10-22: Bing through SearXNG returned 10 `bbb.org` pages out of 12 for a `mozilla.org` query). For any query with a `site:host` term, only results on that host or its subdomains are kept, whichever engine answered, and the run log warns which engine ignored it. If an engine answered with nothing on the site, that answer is not cached, so the next run asks again. `filetype:` is not checked the same way.
 
-Switches for `start.sh`: `--demo`, `--port N`, `--delay SECS` (pause between live search queries), `--foreground` (stay in the terminal, Ctrl-C to stop), `--status`, `--help`. It builds `.venv` on first run if one isn't there. Logs go to `shadowcrumbs.log`.
+Switches that pass through to the dashboard (`start.sh` underneath): `--demo`, `--port N`, `--delay SECS` (pause between live search queries), `--foreground` (stay in the terminal, Ctrl-C to stop), `--status`, `--help`. It builds `.venv` on first run if one isn't there. Logs go to `shadowcrumbs.log`.
 
 Click the **SHADOWCRUMBS** logo in the header to flip between the green screen and a rose theme. It remembers your pick.
 
@@ -58,7 +58,7 @@ python3 -m venv .venv
 
 Open http://127.0.0.1:8470. It binds to localhost on purpose. This holds client data, so keep it there.
 
-Want to see it work with no network? `./start.sh --demo` runs on the bundled demo data, a fictional company on a reserved `.test` domain.
+Want to see it work with no network? `./shadowcrumbs.sh start --demo` runs on the bundled demo data, a fictional company on a reserved `.test` domain.
 
 Make an engagement for `Acme Demo Corp` / `acme-demo.test` and hit Run.
 
@@ -260,7 +260,8 @@ Other settings: `SHADOWCRUMBS_SEARCH_DELAY` (seconds between live queries, defau
 ## Layout
 
 ```
-start.sh / stop.sh           background start and stop
+shadowcrumbs.sh              front door: SearXNG plus the dashboard, start / stop / status
+start.sh / stop.sh           the dashboard alone, which shadowcrumbs.sh calls (no SearXNG)
 run.py                       the server itself
 shadowcrumbs/
   app.py                     API and dashboard host

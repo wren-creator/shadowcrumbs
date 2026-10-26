@@ -3,6 +3,7 @@
 Plugins marked touches_target send traffic to the client's own systems.
 """
 import io
+import time
 import zipfile
 
 import dns.exception
@@ -186,9 +187,23 @@ class CrtSh(Plugin):
             return "warn", f"crt.sh answered {r.status_code}. It is often overloaded, try again later."
         return "ok", f"crt.sh is up ({r.status_code})"
 
+    @staticmethod
+    def _fetch(http, url, attempts=3):
+        """crt.sh throws 502s and timeouts under load, so give it a few tries before calling it an error."""
+        for i in range(attempts):
+            try:
+                return http.get_json(url, timeout=45)
+            except (requests.HTTPError, requests.ConnectionError, requests.Timeout) as e:
+                status = getattr(getattr(e, "response", None), "status_code", None)
+                if isinstance(e, requests.HTTPError) and (status is None or status < 500):
+                    raise
+                if i == attempts - 1:
+                    raise
+                time.sleep(3 * (i + 1))
+
     def run(self, ctx):
         d = ctx.target["domain"]
-        rows = ctx.http.get_json(f"https://crt.sh/?q=%25.{d}&output=json", timeout=45) or []
+        rows = self._fetch(ctx.http, f"https://crt.sh/?q=%25.{d}&output=json") or []
         seen = {}
         for row in rows:
             for n in (row.get("name_value") or "").split("\n"):

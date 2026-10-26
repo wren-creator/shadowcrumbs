@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Start Shadowcrumbs in the background. ./start.sh --help for switches.
+# Start the Shadowcrumbs dashboard in the background. ./start.sh --help for switches.
+# This does NOT start SearXNG. Use ./shadowcrumbs.sh start for the whole stack.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -12,6 +13,9 @@ FOREGROUND=0
 usage() {
     cat <<USAGE
 Usage: ./start.sh [switches]
+
+Dashboard only. It does not start SearXNG, so searches skip it unless SHADOWCRUMBS_SEARXNG_URL is already set.
+For the whole stack use ./shadowcrumbs.sh start.
 
   --demo         run on the bundled fixture data, no network (Acme Demo Corp / acme-demo.test)
   --port N       listen on port N (default 8470)
@@ -53,7 +57,7 @@ while [ $# -gt 0 ]; do
 done
 
 if pid=$(running_pid); then
-    echo "Shadowcrumbs is already running (PID $pid). Use ./stop.sh first."
+    echo "Shadowcrumbs is already running (PID $pid). Use ./shadowcrumbs.sh stop first."
     exit 1
 fi
 rm -f "$PID_FILE"

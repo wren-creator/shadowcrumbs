@@ -2,7 +2,7 @@
 
 Usage: python docs/build_mockup.py DATA_DIR
 DATA_DIR holds meta.json, engagements.json, engagements_<slug>.json, ..._runs.json, ..._findings.json
-captured from a ./start.sh --demo run against fixtures/demo.json (fictional Acme Demo Corp).
+captured from a ./shadowcrumbs.sh start --demo run against fixtures/demo.json (fictional Acme Demo Corp).
 """
 import json
 import pathlib
@@ -36,7 +36,7 @@ window.fetch = async (path, opts = {}) => {
   if (path.startsWith(`/api/engagements/${SLUG}/findings`) && method === "GET") return json(SAMPLE.findings);
   if (m && method === "PATCH") { const f = SAMPLE.findings.find((x) => x.id == m[1]); if (f && "verified" in body) f.verified = body.verified; return json({ ok: true }); }
   if (m && method === "DELETE") { SAMPLE.findings = SAMPLE.findings.filter((x) => x.id != m[1]); return json(null, 204); }
-  return json({ detail: "Sample mode: this mockup is read-only. Run the real thing with ./start.sh --demo." }, 409);
+  return json({ detail: "Sample mode: this mockup is read-only. Run the real thing with ./shadowcrumbs.sh start --demo." }, 409);
 };
 """ % (json.dumps(blob), json.dumps(slug))
 

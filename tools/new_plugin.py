@@ -98,8 +98,8 @@ def main(argv=None):
     else:
         print("  1. Set URL, check the key header name, and map the response into Findings (the three numbered comments).")
         print("     It shows as skipped until URL is filled in.")
-    print("  2. Restart (./stop.sh && ./start.sh). It appears in the dashboard under its tier.")
-    print("  3. Try it on ./start.sh --demo first. Add a test: tests/test_deep.py shows the pattern with a fake http object.")
+    print("  2. Restart (./shadowcrumbs.sh restart). It appears in the dashboard under its tier.")
+    print("  3. Try it on ./shadowcrumbs.sh start --demo first. Add a test: tests/test_deep.py shows the pattern with a fake http object.")
     return 0
 
 
