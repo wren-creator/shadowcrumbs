@@ -13,6 +13,19 @@ In order. Items marked **needs a key** can wait until there is one, so skip down
 - [ ] Live-verify the HIBP and DeHashed plugins, they were built from the vendors' docs and fake responses (**needs keys**; DeHashed key and 500 credits confirmed live on 2026-10-22, one real domain search still to run). The new Verify page exercises the HIBP key check, so run it with a key and report what it says
 - [ ] Decide whether to keep the Firefox-style default user agent, the README discloses it
 
+## Gaps found against Ezrecon (2026-10-26, sighberbank.com, Ezrecon 70 findings vs our 40)
+
+Wayback files (`.well-known/*`, sitemap, feeds, `index.xml`) are fixed. Still to build, biggest client value first:
+
+- [ ] Port scan of the root and each live host (21,23,992,175,443,448,2809,3270,10007,50000), the mainframe ports are the point for this client
+- [ ] Subdomain takeover check (dangling CNAMEs against known provider fingerprints)
+- [ ] AXFR zone transfer attempt against each name server, report refused or open
+- [ ] DNS hygiene: no CAA record, DNSSEC unsigned, SPF policy called out (we only report SPF and DMARC today)
+- [ ] WHOIS extras: registrar lock status, transfer lock, abuse contact
+- [ ] ASN and netblock per IP, plus geolocation, grouped by host
+- [ ] Email spider: crawl each live host to depth 1 for addresses (Ezrecon found a webmaster@ link on intranet that we did not)
+- [ ] Per-host attack surface roll-up in the report, and an executive summary with a remediation order
+
 ## Backlog
 
 - [ ] Measure the exposure queries on a domain that really has something exposed (a client, or a lab you set up). toysrus.com (2026-10-22, search tier only, public listings) gave 0 true hits from the new exposure queries, which is expected for a large retail site, so it proves the noise filters but not the hit rate
@@ -36,6 +49,10 @@ In order. Items marked **needs a key** can wait until there is one, so skip down
 The full list of candidate sources, and where each one fits, is in [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md).
 
 ## Done
+
+- [x] Subdomain discovery beyond crt.sh (2026-10-26): CertSpotter, HackerTarget, OTX and JLDC plus a wordlist brute force with mainframe names and wildcard DNS handling. Tested with fakes, not yet run live on sighberbank.com
+- [x] Wayback well-known files, sitemaps, feeds and data files are kept, and the probe asks for them (2026-10-26)
+- [x] Clickable evidence (2026-10-26): new HTML export, clickable links in the PDF, http and https only
 
 - [x] Verify the DuckDuckGo parser against the live site (2026-10-07: layout confirmed, sponsored results now filtered)
 - [x] Handle DDG throttling: stop on the first block and stay quiet for an hour (blocks measured at 50+ minutes, retrying cannot help)
