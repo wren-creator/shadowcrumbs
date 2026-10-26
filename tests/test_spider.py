@@ -114,3 +114,12 @@ def test_a_new_host_found_on_a_page_is_crawled_too(store):
     p["https://contacts.acme.test/"] = Resp(body=b'<a href="mailto:hr@acme.test">hr</a>')
     found = {(f.category, f.value) for f in run(store, Http(p, live=("intranet.acme.test", "contacts.acme.test")))}
     assert ("emails", "hr@acme.test") in found
+
+
+def test_the_crawl_goes_six_clicks_deep_and_no_further(store):
+    chain = {f"https://intranet.acme.test/{'p' * n or 'x'}.html" if n else "https://intranet.acme.test/": None for n in range(9)}
+    urls = list(chain)
+    p = {u: Resp(body=f'<a href="{urls[i + 1]}">next</a>'.encode()) for i, u in enumerate(urls[:-1])}
+    http = Http(p)
+    run(store, http)
+    assert http.fetched == urls[:7]          # the front page is depth 0, so six clicks reaches the seventh page
