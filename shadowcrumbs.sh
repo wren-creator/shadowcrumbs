@@ -5,7 +5,7 @@
 #   ./shadowcrumbs.sh status
 #   ./shadowcrumbs.sh stop
 #   ./shadowcrumbs.sh restart [same switches as start]
-# It is a thin wrapper over start.sh, stop.sh and tools/searxng.sh, which still work on their own.
+# It is a thin wrapper over start.sh (dashboard only), stop.sh and tools/searxng.sh, which still work on their own.
 set -euo pipefail
 
 DIR="$(cd "$(dirname "$0")" && pwd)"

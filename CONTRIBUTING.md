@@ -20,7 +20,7 @@ cd shadowcrumbs
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
 .venv/bin/python -m pytest
-./start.sh --demo     # fictional data, no network, open http://127.0.0.1:8470
+./shadowcrumbs.sh start --demo     # fictional data, no network, open http://127.0.0.1:8470
 ```
 
 All the tests should pass before you start (the browser test skips itself if there is no Chromium), and again before you open a pull request.

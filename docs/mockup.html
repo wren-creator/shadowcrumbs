@@ -209,7 +209,7 @@ window.fetch = async (path, opts = {}) => {
   if (path.startsWith(`/api/engagements/${SLUG}/findings`) && method === "GET") return json(SAMPLE.findings);
   if (m && method === "PATCH") { const f = SAMPLE.findings.find((x) => x.id == m[1]); if (f && "verified" in body) f.verified = body.verified; return json({ ok: true }); }
   if (m && method === "DELETE") { SAMPLE.findings = SAMPLE.findings.filter((x) => x.id != m[1]); return json(null, 204); }
-  return json({ detail: "Sample mode: this mockup is read-only. Run the real thing with ./start.sh --demo." }, 409);
+  return json({ detail: "Sample mode: this mockup is read-only. Run the real thing with ./shadowcrumbs.sh start --demo." }, 409);
 };
 </script>
 <script>"use strict";
