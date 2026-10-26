@@ -26,6 +26,8 @@ Wayback files (`.well-known/*`, sitemap, feeds, `index.xml`) are fixed. Still to
 - [ ] Email spider: crawl each live host to depth 1 for addresses (Ezrecon found a webmaster@ link on intranet that we did not)
 - [ ] Per-host attack surface roll-up in the report, and an executive summary with a remediation order
 
+- [ ] JLDC (Anubis) answers 403 and OTX answers 429 to `passive_subdomains` from this network (2026-10-26), even with an identifying `Shadowcrumbs/0.1` user agent, so JLDC's block is not about the user agent. Check from another network, and whether OTX wants a free key. Do not work around a block, drop the source if it stays closed
+
 ## Backlog
 
 - [ ] Measure the exposure queries on a domain that really has something exposed (a client, or a lab you set up). toysrus.com (2026-10-22, search tier only, public listings) gave 0 true hits from the new exposure queries, which is expected for a large retail site, so it proves the noise filters but not the hit rate

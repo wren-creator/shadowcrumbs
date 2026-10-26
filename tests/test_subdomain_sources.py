@@ -20,6 +20,7 @@ class Http:
         self.by_host = by_host
 
     def get(self, url, **kw):
+        assert kw["headers"]["User-Agent"].startswith("Shadowcrumbs/"), "passive sources must say who is asking"
         for key, reply in self.by_host.items():
             if key in url:
                 if isinstance(reply, Exception):

@@ -12,7 +12,7 @@ import dns.exception
 import dns.resolver
 import requests
 
-from .. import config
+from .. import __version__, config
 from ..plugin import Finding, Plugin, register
 from ..util import in_domain
 from .deep_plugins import dns_check
@@ -55,6 +55,10 @@ def parse_jldc(text, domain):
     return {h for h in (clean(n, domain) for n in (data if isinstance(data, list) else [])) if h}
 
 
+# These are open APIs asked for a few names, so say who is asking instead of borrowing a browser's identity.
+# SHADOWCRUMBS_UA does not apply here, it exists for the search scraping.
+USER_AGENT = f"Shadowcrumbs/{__version__} (+https://github.com/wren-creator/shadowcrumbs)"
+
 SOURCES = (
     ("certspotter", "https://api.certspotter.com/v1/issuances?domain={d}&include_subdomains=true&expand=dns_names", parse_certspotter),
     ("hackertarget", "https://api.hackertarget.com/hostsearch/?q={d}", parse_hackertarget),
@@ -83,7 +87,7 @@ class PassiveSubdomains(Plugin):
         found, failed = {}, []
         for name, url, parse in SOURCES:
             try:
-                r = ctx.http.get(url.format(d=d), timeout=30, headers={"Accept": "application/json"})
+                r = ctx.http.get(url.format(d=d), timeout=30, headers={"Accept": "application/json", "User-Agent": USER_AGENT})
                 if r.status_code != 200:
                     failed.append(f"{name} (HTTP {r.status_code})")
                     continue
