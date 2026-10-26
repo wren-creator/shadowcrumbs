@@ -248,7 +248,7 @@ function renderControls() {
         title: "Searches are saved for a week. Forget them so the next run asks the search engines again.",
         onclick: clearSearchCache,
       }, "Clear search cache"),
-      exportLink("md", "Export MD"), exportLink("pdf", "Export PDF"), exportLink("json", "Export JSON")),
+      exportLink("md", "Export MD"), exportLink("pdf", "Export PDF"), exportLink("html", "Export HTML"), exportLink("json", "Export JSON")),
     el("div", { class: statusClass, role: "status" }, statusText),
     state.notice && el("div", { class: state.notice.kind === "error" ? "error" : "warn" }, state.notice.text),
     locked && el("div", { class: "warn" }, "Deep dive is locked. Add an authorization reference under Scope above.")

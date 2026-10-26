@@ -4,6 +4,7 @@ This one asks the Internet Archive which URLs it has ever seen on the domain and
 ones that smell interesting: admin panels, backups, configs, old logins. Each one is reported under Exposed
 Paths and Files with its full URL, so the report lists them and not just how many there were.
 """
+import re
 import time
 
 import requests
@@ -11,6 +12,8 @@ import requests
 from shadowcrumbs.paths import classify, notes_for
 from shadowcrumbs.plugin import Finding, Plugin, register
 
+
+DATA_FILE = re.compile(r"\.(json|xml|csv|xlsx?|log)$", re.I)   # data endpoints and exports, kept even though a plain document is not
 
 RETRY_STATUS = {429, 502, 503, 504}   # the Archive says "busy", so wait and ask again
 PAUSES = (0, 5, 15)                   # seconds before each of the three tries
@@ -79,7 +82,9 @@ class WaybackUrls(Plugin):
         for row in rows[1:]:  # first row is the header
             original = row[0]
             kind = classify(original)             # looks at the path, never the host: "dev" must not match devcorp.com
-            if kind and kind[0] != "file":        # plain documents are the documents search's job
+            if kind and kind[0] == "file" and DATA_FILE.search(original.split("?", 1)[0]):
+                kind = ("data", None)              # a data file is worth listing, a PDF is the documents search's job
+            if kind and (kind[0] != "file"):
                 hits += 1
                 yield Finding("exposures", original, url=original, confidence=35,
                               notes=notes_for(kind[0], "Seen by the Internet Archive. May no longer exist."))

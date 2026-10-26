@@ -32,7 +32,7 @@ class FakeHttp:
     def get(self, url, **kw):
         """Plain GETs (urlscan.io, say) answer with an empty result set unless a test says otherwise."""
         class Empty:
-            status_code, headers = 200, {}
+            status_code, headers, text = 200, {}, ""
             def json(self): return {"results": []}
             def raise_for_status(self): pass
             def iter_content(self, n): return iter(())
@@ -283,6 +283,7 @@ def test_full_deep_run_through_engine(store, monkeypatch):
     store.update_meta(authorized=True, auth_ref="SOW-42")
     store.add_finding("subdomains", "vpn.acme-demo.test", "t", "search")
     stub_dns(monkeypatch, {("acme-demo.test", "A"): (["203.0.113.10"], "ok")})
+    monkeypatch.setattr("shadowcrumbs.plugins.subdomain_sources.a_records", lambda name: set())   # no real DNS from a test
     monkeypatch.setattr(engine, "HttpClient", lambda: FakeHttp(
         json_map={"https://rdap.org/domain/": {"nameservers": [{"ldhName": "ns1.acme-demo.test"}]}},
         probes={"acme-demo.test": {"scheme": "https", "status": 200, "final_url": "https://acme-demo.test/",

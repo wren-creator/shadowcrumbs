@@ -29,3 +29,38 @@ def test_json_carries_the_raw_evidence_list_and_confidence_label():
 
 def test_pdf_builds_without_error_for_a_finding_with_several_evidence_links():
     assert exporters.to_pdf(demo()).startswith(b"%PDF")
+
+
+def hostile():
+    s = demo()
+    s.add_finding("exposures", "https://acme.test/.well-known/ai-plugin.json", "wayback_urls", "deep",
+                  url="https://acme.test/.well-known/ai-plugin.json", confidence=35)
+    s.add_finding("exposures", "bad one", "x", "search", url='javascript:alert(1)')
+    s.add_finding("exposures", "quote", "x", "search", url='https://acme.test/a"onmouseover="x')
+    s.add_finding("exposures", "<script>alert(1)</script>", "x", "search", url="https://acme.test/p(1)")
+    return s
+
+
+def test_html_export_has_real_links_that_open_in_a_new_tab():
+    page = exporters.to_html(demo())
+    assert '<a href="https://crt.sh/?q=vpn.acme.test" target="_blank" rel="noopener noreferrer">' in page
+    assert "<script" not in page and "http-equiv" not in page
+
+
+def test_only_http_links_become_clickable_and_nothing_can_break_out_of_the_markup():
+    s = hostile()
+    page, md = exporters.to_html(s), exporters.to_markdown(s)
+    assert 'href="javascript:' not in page and "](javascript:" not in md
+    assert 'onmouseover="x' not in page.replace("&quot;", "")      # the quote is escaped, so it stays inside the attribute
+    assert "<script>alert(1)</script>" not in page and "&lt;script&gt;" in page
+    assert "(https://acme.test/p%281%29)" in md                      # a bracket in the URL no longer ends the markdown link
+
+
+def test_pdf_evidence_is_clickable(monkeypatch):
+    import reportlab.platypus.paragraph as para
+    seen = []
+    orig = para.Paragraph.__init__
+    monkeypatch.setattr(para.Paragraph, "__init__", lambda self, text, *a, **k: (seen.append(text), orig(self, text, *a, **k))[1])
+    assert exporters.to_pdf(hostile()).startswith(b"%PDF")
+    assert any('<a href="https://acme.test/.well-known/ai-plugin.json"' in t for t in seen)
+    assert not any('href="javascript:' in t for t in seen)

@@ -2,7 +2,7 @@
 
 The crumbs a company leaves behind, collected in one place before you ever touch the target.
 
-Give it a company name, a domain, or an IP range. It pulls what search engines already know: subdomains, exposed documents, email addresses and their format, employee names and titles, and the tech stack people brag about in job posts and LinkedIn blurbs. Every client gets its own tab and its own database. Export the lot as Markdown, PDF, or JSON when it's time to write it up.
+Give it a company name, a domain, or an IP range. It pulls what search engines already know: subdomains, exposed documents, email addresses and their format, employee names and titles, and the tech stack people brag about in job posts and LinkedIn blurbs. Every client gets its own tab and its own database. Export the lot as HTML, PDF, Markdown, or JSON when it's time to write it up.
 
 ## Use it on engagements you are authorized for
 
@@ -72,7 +72,7 @@ Just want to show it off? Open `docs/mockup.html` in any browser. It is the real
    - `source_packs/exposure_extras.json` holds seven more queries along the same lines (dev and staging hosts, API docs, remote access pages, admin tools, default server pages, team pages), which some search engines handle unevenly. Import it on the Sources page when you want them too. Expect thinner results until you have a Brave key.
 3. **Deep dive.** Direct lookups and live requests: DNS, RDAP, certificate transparency, public urlscan.io scans, GitHub code search, historical URLs from the Internet Archive, a GET against a short list of well-known paths (`exposure_probe`: `.git`, `.env`, backups, admin panels, phpinfo, actuator health) on the domain and every subdomain found, subdomain resolution with dangling CNAME checks, an HTTP probe, metadata from the documents you found, and what is written inside them (see **Reading inside files** below). Flip the toggle when search has given you what it can.
 4. **Triage.** Mark findings verified, drop the junk, filter the list. Every finding shows a confidence score and a plain-language label (low/medium/high); a second, independent source reporting the same thing raises it. Click a source tag under a finding to open the exact page it came from — every corroborating source gets its own link, not just the first one found.
-5. **Export.** Markdown, PDF, or JSON, with scope, every finding's confidence and full evidence links, and run history baked in.
+5. **Export.** HTML, PDF, Markdown, or JSON, with scope, every finding's confidence and full evidence links, and run history baked in. Evidence links are clickable in the HTML (one file, opens in any browser, no script), the PDF and the Markdown. Only http and https addresses become links.
 
 ## Reading inside files
 
