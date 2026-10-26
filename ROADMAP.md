@@ -23,7 +23,6 @@ Wayback files (`.well-known/*`, sitemap, feeds, `index.xml`) are fixed. Still to
 - [ ] DNS hygiene: no CAA record, DNSSEC unsigned, SPF policy called out (we only report SPF and DMARC today)
 - [ ] WHOIS extras: registrar lock status, transfer lock, abuse contact
 - [ ] ASN and netblock per IP, plus geolocation, grouped by host
-- [ ] Email spider: crawl each live host to depth 1 for addresses (Ezrecon found a webmaster@ link on intranet that we did not)
 - [ ] Per-host attack surface roll-up in the report, and an executive summary with a remediation order
 
 - [ ] JLDC (Anubis) answers 403 and OTX answers 429 to `passive_subdomains` from this network (2026-10-26), even with an identifying `Shadowcrumbs/0.1` user agent, so JLDC's block is not about the user agent. Check from another network, and whether OTX wants a free key. Do not work around a block, drop the source if it stays closed
@@ -34,6 +33,7 @@ Wayback files (`.well-known/*`, sitemap, feeds, `index.xml`) are fixed. Still to
 - [ ] Show an estimated Brave cost next to a scan (queries times the per-query price, set by the user), so nobody is surprised by a bill. A full scan is about 40 queries, 20 cents at $5 per 1,000
 
 - [ ] Measure the hit rate of the new exposure queries on an authorised domain from the new network, then keep what earns its 8 seconds and drop the rest
+- [ ] Spider extras: HTML comments that leak (todo notes, addresses), JavaScript files for endpoints, and following the sitemap.xml it finds
 - [ ] Snippet-free extractor for custom sources, so backup and config file searches (`ext:bak`, `ext:sql`) can be added without keeping text that might hold a secret
 
 - [ ] Vulners plugin: turn product and version strings from the tech findings into known CVEs
@@ -51,6 +51,8 @@ Wayback files (`.well-known/*`, sitemap, feeds, `index.xml`) are fixed. Still to
 The full list of candidate sources, and where each one fits, is in [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md).
 
 ## Done
+
+- [x] Site spider (2026-10-26): follows links two clicks deep on the domain and every live subdomain, inside the domain only. Reports linked documents (then opened and read by doc_metadata and doc_content), new hosts, ports named in links, contact addresses, login and upload forms. First live run on sighberbank.com found passwords.xlsx, a remote access guide and a mainframe on port 23 linked as GUEST login, all reached from the intranet front page
 
 - [x] Subdomain discovery beyond crt.sh (2026-10-26): CertSpotter, HackerTarget, OTX and JLDC plus a wordlist brute force with mainframe names and wildcard DNS handling. Tested with fakes, not yet run live on sighberbank.com
 - [x] Wayback well-known files, sitemaps, feeds and data files are kept, and the probe asks for them (2026-10-26)

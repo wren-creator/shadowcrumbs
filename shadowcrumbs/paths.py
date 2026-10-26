@@ -36,6 +36,7 @@ KINDS = [
 LABELS = {k: label for k, label, _ in KINDS}
 LABELS["file"] = "Exposed file"
 LABELS["data"] = "Data or export file"
+LABELS["upload"] = "File upload form"
 
 # a page title that gives an open directory away even when the URL does not
 LISTING_TITLE = re.compile(r"^\s*index of\s*/|^\s*directory listing for\s*/", re.I)
